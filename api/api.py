@@ -16,86 +16,92 @@ from fastapi import (
 from fastapi.middleware.cors import CORSMiddleware
 from loguru import logger
 from pydantic import BaseModel, Field
-from swarms import Agent, SwarmRouter
+from swarms import Agent, SwarmRouter, SwarmType
 from swarms.utils.litellm_tokenizer import count_tokens
 
 load_dotenv()
 
-
-def generate_id():
-    return str(uuid.uuid4())
-
-
-unique_id = generate_id()
-
-
 class AgentSpec(BaseModel):
     agent_name: Optional[str] = Field(
-        None, title="Agent Name", max_length=100
+        None, description="Agent Name", max_length=100
     )
     description: Optional[str] = Field(
-        None, title="Description", max_length=500
+        None, description="Description", max_length=500
     )
     system_prompt: Optional[str] = Field(
-        None, title="System Prompt", max_length=500
+        None, description="System Prompt", max_length=500
     )
     model_name: Optional[str] = Field(
-        None, title="Model Name", max_length=500
+        "gpt-4o", description="Model Name", max_length=500
     )
     auto_generate_prompt: Optional[bool] = Field(
-        None, title="Auto Generate Prompt"
+        False, description="Auto Generate Prompt"
     )
-    max_tokens: Optional[int] = Field(None, title="Max Tokens")
-    temperature: Optional[float] = Field(None, title="Temperature")
-    role: Optional[str] = Field(None, title="Role")
-    max_loops: Optional[int] = Field(None, title="Max Loops")
+    max_tokens: Optional[int] = Field(None, description="Max Tokens")
+    temperature: Optional[float] = Field(
+        0.5, description="Temperature"
+    )
+    role: Optional[str] = Field("worker", description="Role")
+    max_loops: Optional[int] = Field(1, description="Max Loops")
 
-
-class Agents(BaseModel):
-    name: Optional[str] = Field(
-        None, title="Agent Name", max_length=100
-    )
-    description: Optional[str] = Field(
-        None, title="Description", max_length=500
-    )
-    agents: Optional[List[AgentSpec]] = Field(None, title="Agents")
 
 
 class SwarmSpec(BaseModel):
     name: Optional[str] = Field(
-        None, title="Swarm Name", max_length=100
+        None, description="Swarm Name", max_length=100
     )
     description: Optional[str] = Field(
-        None, title="Description", max_length=500
+        None, description="Description", max_length=500
     )
-    agents: Optional[List[AgentSpec]] = Field(None, title="Agents")
-    max_loops: Optional[int] = Field(None, title="Max Loops")
-    swarm_type: Optional[str] = Field(None, title="Swarm Type")
-    flow: Optional[str] = Field(None, title="Flow")
-    task: Optional[str] = Field(None, title="Task")
-    img: Optional[str] = Field(None, title="Img")
+    agents: Optional[List[AgentSpec]] = Field(
+        None, description="Agents"
+    )
+    max_loops: Optional[int] = Field(None, description="Max Loops")
+    swarm_type: Optional[SwarmType] = Field(None, description="Swarm Type")
+    flow: Optional[str] = Field(None, description="Flow")
+    task: Optional[str] = Field(None, description="Task")
+    img: Optional[str] = Field(None, description="Img")
 
 
 def create_swarm(swarm_spec: SwarmSpec) -> SwarmRouter:
+    print(swarm_spec)
     try:
-        # Create agents from the swarm specification
-        agents = [
-            Agent(
-                agent_name=agent_spec.agent_name,
-                description=agent_spec.description,
-                system_prompt=agent_spec.system_prompt,
-                model_name=agent_spec.model_name,
-                auto_generate_prompt=agent_spec.auto_generate_prompt,
-                max_tokens=agent_spec.max_tokens,
-                temperature=agent_spec.temperature,
-                role=agent_spec.role,
-                max_loops=agent_spec.max_loops,
-            )
-            for agent_spec in swarm_spec.agents
-        ]
+        # Validate swarm_spec
+        if not swarm_spec.agents:
+            raise ValueError("Swarm specification must include at least one agent.")
 
-        print(agents)
+        agents = []
+        for agent_spec in swarm_spec.agents:
+            try:
+                # Validate agent_spec fields
+                if not agent_spec.agent_name:
+                    raise ValueError("Agent name is required.")
+                if not agent_spec.model_name:
+                    raise ValueError("Model name is required.")
 
+                # Create the agent
+                agent = Agent(
+                    agent_name=agent_spec.agent_name,
+                    description=agent_spec.description,
+                    system_prompt=agent_spec.system_prompt,
+                    model_name=agent_spec.model_name,
+                    auto_generate_prompt=agent_spec.auto_generate_prompt,
+                    max_tokens=agent_spec.max_tokens,
+                    temperature=agent_spec.temperature,
+                    role=agent_spec.role,
+                    max_loops=agent_spec.max_loops,
+                )
+                agents.append(agent)
+                logger.info("Successfully created agent: {}", agent_spec.agent_name)
+            except ValueError as ve:
+                logger.error("Validation error for agent {}: {}", agent_spec.agent_name, str(ve))
+            except Exception as agent_error:
+                logger.error("Error creating agent {}: {}", agent_spec.agent_name, str(agent_error))
+
+        if not agents:
+            raise ValueError("No valid agents could be created from the swarm specification.")
+
+                
         # Create and configure the swarm
         swarm = SwarmRouter(
             name=swarm_spec.name,
@@ -106,13 +112,8 @@ def create_swarm(swarm_spec: SwarmSpec) -> SwarmRouter:
             output_type="all",
         )
 
-        print(swarm)
-
         # Run the swarm task
         output = swarm.run(task=swarm_spec.task)
-
-        print(output)
-        print(type(output))
         return output
     except Exception as e:
         logger.error("Error creating swarm: {}", str(e))
@@ -120,7 +121,41 @@ def create_swarm(swarm_spec: SwarmSpec) -> SwarmRouter:
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to create swarm: {str(e)}",
         )
+        
+        
 
+# Add this function after your get_supabase_client() function
+async def log_api_request(api_key: str, data: Dict[str, Any]) -> None:
+    """
+    Log API request data to Supabase swarms_api_logs table.
+    
+    Args:
+        api_key: The API key used for the request
+        data: Dictionary containing request data to log
+    """
+    try:
+        supabase_client = get_supabase_client()
+        
+        # Create log entry
+        log_entry = {
+            "api_key": api_key,
+            "data": data,
+        }
+        
+        # Insert into swarms_api_logs table
+        response = (
+            supabase_client.table("swarms_api_logs")
+            .insert(log_entry)
+            .execute()
+        )
+        
+        print(response)
+        
+        if not response.data:
+            logger.error("Failed to log API request")
+            
+    except Exception as e:
+        logger.error(f"Error logging API request: {str(e)}")
 
 def get_supabase_client():
     supabase_url = os.getenv("SUPABASE_URL")
@@ -170,6 +205,91 @@ def verify_api_key(x_api_key: str = Header(...)) -> None:
     """
     if not check_api_key(x_api_key):
         raise HTTPException(status_code=403, detail="Invalid API Key")
+
+
+async def run_swarm_completion(
+    swarm: SwarmSpec, x_api_key: str = None
+) -> Dict[str, Any]:
+    """
+    Run a swarm with the specified task.
+    """
+    try:
+        swarm_name = swarm.name
+
+        agents = swarm.agents
+        
+        await log_api_request(x_api_key, swarm.model_dump())
+
+        # Log start of swarm execution
+        logger.info(
+            f"Starting swarm {swarm_name} with {len(agents)} agents"
+        )
+        start_time = time.time()
+
+        # Create and run the swarm
+        logger.debug(f"Creating swarm object for {swarm_name}")
+        result = create_swarm(swarm)
+        logger.debug(f"Running swarm task: {swarm.task}")
+
+        # Calculate execution time
+        execution_time = time.time() - start_time
+        logger.info(
+            f"Swarm {swarm_name} executed in {round(execution_time, 2)} seconds"
+        )
+
+        # Calculate costs
+        logger.debug(f"Calculating costs for swarm {swarm_name}")
+        cost_info = calculate_swarm_cost(
+            agents=agents,
+            input_text=swarm.task,
+            agent_outputs=result,
+            execution_time=execution_time,
+        )
+        logger.info(
+            f"Cost calculation completed for swarm {swarm_name}: {cost_info}"
+        )
+
+        # Deduct credits based on calculated cost
+        logger.debug(
+            f"Deducting credits for swarm {swarm_name} with cost {cost_info['total_cost']}"
+        )
+
+        deduct_credits(
+            x_api_key,
+            cost_info["total_cost"],
+            f"swarm_execution_{swarm_name}",
+        )
+
+        # Format the response
+        response = {
+            "status": "success",
+            "swarm_name": swarm_name,
+            "description": swarm.description,
+            "task": swarm.task,
+            "metadata": {
+                "max_loops": swarm.max_loops,
+                "num_agents": len(agents),
+                "execution_time_seconds": round(execution_time, 2),
+                "completion_time": time.time(),
+                "billing_info": cost_info,
+            },
+            "output": result,
+        }
+        logger.info(response)
+        await log_api_request(x_api_key, response)
+        
+        return response
+
+    except HTTPException as http_exc:
+        logger.error("HTTPException occurred: {}", http_exc.detail)
+        raise
+    except Exception as e:
+        logger.error("Error running swarm {}: {}", swarm_name, str(e))
+        logger.exception(e)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to run swarm: {str(e)}",
+        )
 
 
 def deduct_credits(
@@ -410,100 +530,6 @@ def calculate_swarm_cost(
         raise ValueError(f"Failed to calculate swarm cost: {str(e)}")
 
 
-# # Build the agents
-# @app.post(
-#     "/v1/agents",
-#     dependencies=[
-#         Depends(verify_api_key),
-#         Depends(rate_limit_dependency),
-#     ],
-# )
-# async def build_agents(
-#     agents: Agents,
-# ) -> Dict[str, Any]:
-#     # Verify API key
-
-#     # Deduct credits for agent creation
-#     # deduct_credits(x_api_key, 1.0, "agent_creation")
-
-#     try:
-#         # Create list to store created agents
-#         created_agents = []
-
-#         # Create each agent and add to registry
-#         for agent_spec in agents.agents:
-#             agent = create_agent(agent_spec)
-#             registry.add_agent(agent)
-#             created_agents.append(
-#                 {"name": agent.agent_name, "id": agent.id}
-#             )
-
-#         return {
-#             "status": "success",
-#             "message": f"Successfully created {len(created_agents)} agents",
-#             "agents": created_agents,
-#             "name": agents.name,
-#             "description": agents.description,
-#         }
-
-#     except Exception as e:
-#         logger.error(f"Error creating agents: {str(e)}")
-#         raise HTTPException(
-#             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-#             detail=f"Failed to create agents: {str(e)}",
-#         )
-
-
-# @app.get(
-#     "/v1/agents/{team_name}",
-#     dependencies=[
-#         Depends(verify_api_key),
-#         Depends(rate_limit_dependency),
-#     ],
-# )
-# async def get_agents_info() -> Dict[str, Any]:
-#     # Verify API key
-
-#     try:
-#         # Get all agents from registry
-#         agents = registry.return_all_agents()
-
-#         # Compile agent statistics and info
-#         agents_info = []
-#         for agent in agents:
-#             agents_info.append(
-#                 {
-#                     "name": agent.agent_name,
-#                     "id": agent.id,
-#                     "description": agent.description,
-#                     "model_name": agent.model_name,
-#                     "role": agent.role,
-#                 }
-#             )
-
-#         return {
-#             "status": "success",
-#             "total_agents": len(agents),
-#             "agents": agents_info,
-#             "registry_id": registry.id,
-#             "stats": {
-#                 "active_agents": len(
-#                     [a for a in agents if a.is_active]
-#                 ),
-#                 "models_used": list(
-#                     set(a.model_name for a in agents if a.model_name)
-#                 ),
-#             },
-#         }
-
-#     except Exception as e:
-#         logger.error(f"Error fetching agents info: {str(e)}")
-#         raise HTTPException(
-#             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-#             detail=f"Failed to fetch agents info: {str(e)}",
-#         )
-
-
 @app.get("/")
 def root():
     return {
@@ -523,86 +549,56 @@ def health():
     ],
 )
 async def run_swarm(
-    swarm: SwarmSpec,
-    x_api_key: str = Header(...),
+    swarm: SwarmSpec, x_api_key=Header(...)
 ) -> Dict[str, Any]:
     """
     Run a swarm with the specified task.
     """
-    try:
-        swarm_name = swarm.name
+    return await run_swarm_completion(swarm, x_api_key)
 
-        agents = swarm.agents
+@app.post(
+    "/v1/swarm/batch/completions",
+    dependencies=[
+        Depends(verify_api_key),
+    ],
+)
+async def run_batch_completions(
+    swarms: List[SwarmSpec], x_api_key=Header(...)
+) -> List[Dict[str, Any]]:
+    """
+    Run a batch of swarms with the specified tasks.
+    """
+    results = []
+    for swarm in swarms:
+        try:
+            # Call the existing run_swarm function for each swarm
+            result = await run_swarm_completion(swarm, x_api_key)
+            results.append(result)
+        except HTTPException as http_exc:
+            logger.error(
+                "HTTPException occurred: {}", http_exc.detail
+            )
+            results.append(
+                {
+                    "status": "error",
+                    "swarm_name": swarm.name,
+                    "detail": http_exc.detail,
+                }
+            )
+        except Exception as e:
+            logger.error(
+                "Error running swarm {}: {}", swarm.name, str(e)
+            )
+            logger.exception(e)
+            results.append(
+                {
+                    "status": "error",
+                    "swarm_name": swarm.name,
+                    "detail": f"Failed to run swarm: {str(e)}",
+                }
+            )
 
-        # Log start of swarm execution
-        logger.info(
-            f"Starting swarm {swarm_name} with {len(agents)} agents"
-        )
-        start_time = time.time()
-
-        # Create and run the swarm
-        logger.debug(f"Creating swarm object for {swarm_name}")
-        result = create_swarm(swarm)
-        print(result)
-        logger.debug(f"Running swarm task: {swarm.task}")
-
-        # Calculate execution time
-        execution_time = time.time() - start_time
-        logger.info(
-            f"Swarm {swarm_name} executed in {round(execution_time, 2)} seconds"
-        )
-
-        # Calculate costs
-        logger.debug(f"Calculating costs for swarm {swarm_name}")
-        cost_info = calculate_swarm_cost(
-            agents=agents,
-            input_text=swarm.task,
-            agent_outputs=result,
-            execution_time=execution_time,
-        )
-        logger.info(
-            f"Cost calculation completed for swarm {swarm_name}: {cost_info}"
-        )
-
-        # Deduct credits based on calculated cost
-        logger.debug(
-            f"Deducting credits for swarm {swarm_name} with cost {cost_info['total_cost']}"
-        )
-
-        deduct_credits(
-            x_api_key,
-            cost_info["total_cost"],
-            f"swarm_execution_{swarm_name}",
-        )
-
-        # Format the response
-        response = {
-            "status": "success",
-            "swarm_name": swarm_name,
-            "description": swarm.description,
-            "task": swarm.task,
-            "metadata": {
-                "max_loops": swarm.max_loops,
-                "num_agents": len(agents),
-                "execution_time_seconds": round(execution_time, 2),
-                "completion_time": time.time(),
-                "billing_info": cost_info,
-            },
-            "output": result,
-        }
-        logger.info(response)
-        return response
-
-    except HTTPException as http_exc:
-        logger.error("HTTPException occurred: {}", http_exc.detail)
-        raise
-    except Exception as e:
-        logger.error("Error running swarm {}: {}", swarm_name, str(e))
-        logger.exception(e)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to run swarm: {str(e)}",
-        )
+    return results
 
 
 # --- Main Entrypoint ---

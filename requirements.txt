@@ -3,4 +3,5 @@ loguru
 pydantic
 fastapi
 uvicorn
-guvicorn
+gunicorn
+python-dotenv
