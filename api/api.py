@@ -22,12 +22,8 @@ load_dotenv()
 
 
 class AgentSpec(BaseModel):
-    agent_name: Optional[str] = Field(
-        None, description="Agent Name", max_length=100
-    )
-    description: Optional[str] = Field(
-        None, description="Description", max_length=500
-    )
+    agent_name: Optional[str] = Field(None, description="Agent Name", max_length=100)
+    description: Optional[str] = Field(None, description="Description", max_length=500)
     system_prompt: Optional[str] = Field(
         None, description="System Prompt", max_length=500
     )
@@ -38,27 +34,17 @@ class AgentSpec(BaseModel):
         False, description="Auto Generate Prompt"
     )
     max_tokens: Optional[int] = Field(None, description="Max Tokens")
-    temperature: Optional[float] = Field(
-        0.5, description="Temperature"
-    )
+    temperature: Optional[float] = Field(0.5, description="Temperature")
     role: Optional[str] = Field("worker", description="Role")
     max_loops: Optional[int] = Field(1, description="Max Loops")
 
 
 class SwarmSpec(BaseModel):
-    name: Optional[str] = Field(
-        None, description="Swarm Name", max_length=100
-    )
-    description: Optional[str] = Field(
-        None, description="Description", max_length=500
-    )
-    agents: Optional[List[AgentSpec]] = Field(
-        None, description="Agents"
-    )
+    name: Optional[str] = Field(None, description="Swarm Name", max_length=100)
+    description: Optional[str] = Field(None, description="Description", max_length=500)
+    agents: Optional[List[AgentSpec]] = Field(None, description="Agents")
     max_loops: Optional[int] = Field(None, description="Max Loops")
-    swarm_type: Optional[SwarmType] = Field(
-        None, description="Swarm Type"
-    )
+    swarm_type: Optional[SwarmType] = Field(None, description="Swarm Type")
     flow: Optional[str] = Field(None, description="Flow")
     task: Optional[str] = Field(None, description="Task")
     img: Optional[str] = Field(None, description="Img")
@@ -69,9 +55,7 @@ def create_swarm(swarm_spec: SwarmSpec) -> SwarmRouter:
     try:
         # Validate swarm_spec
         if not swarm_spec.agents:
-            raise ValueError(
-                "Swarm specification must include at least one agent."
-            )
+            raise ValueError("Swarm specification must include at least one agent.")
 
         agents = []
         for agent_spec in swarm_spec.agents:
@@ -157,11 +141,7 @@ async def log_api_request(api_key: str, data: Dict[str, Any]) -> None:
         }
 
         # Insert into swarms_api_logs table
-        response = (
-            supabase_client.table("swarms_api_logs")
-            .insert(log_entry)
-            .execute()
-        )
+        response = supabase_client.table("swarms_api_logs").insert(log_entry).execute()
 
         print(response)
 
@@ -236,9 +216,7 @@ async def run_swarm_completion(
         await log_api_request(x_api_key, swarm.model_dump())
 
         # Log start of swarm execution
-        logger.info(
-            f"Starting swarm {swarm_name} with {len(agents)} agents"
-        )
+        logger.info(f"Starting swarm {swarm_name} with {len(agents)} agents")
         start_time = time.time()
 
         # Create and run the swarm
@@ -260,9 +238,7 @@ async def run_swarm_completion(
             agent_outputs=result,
             execution_time=execution_time,
         )
-        logger.info(
-            f"Cost calculation completed for swarm {swarm_name}: {cost_info}"
-        )
+        logger.info(f"Cost calculation completed for swarm {swarm_name}: {cost_info}")
 
         # Deduct credits based on calculated cost
         logger.debug(
@@ -307,9 +283,7 @@ async def run_swarm_completion(
         )
 
 
-def deduct_credits(
-    api_key: str, amount: float, product_name: str
-) -> None:
+def deduct_credits(api_key: str, amount: float, product_name: str) -> None:
     """
     Deducts the specified amount of credits for the user identified by api_key,
     preferring to use free_credit before using regular credit, and logs the transaction.
@@ -406,9 +380,7 @@ app = FastAPI(
 # Enable CORS (adjust origins as needed)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "*"
-    ],  # In production, restrict this to specific domains
+    allow_origins=["*"],  # In production, restrict this to specific domains
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -419,9 +391,7 @@ def calculate_swarm_cost(
     agents: List[Agent],
     input_text: str,
     execution_time: float,
-    agent_outputs: Union[
-        List[str], str
-    ] = None,  # Add agent outputs parameter
+    agent_outputs: Union[List[str], str] = None,  # Add agent outputs parameter
 ) -> Dict[str, Any]:
     """
     Calculate the cost of running a swarm based on agents, tokens, and execution time.
@@ -439,9 +409,7 @@ def calculate_swarm_cost(
     # Base costs per unit (these could be moved to environment variables)
     COST_PER_AGENT = 0.01  # Base cost per agent
     COST_PER_1M_INPUT_TOKENS = 5.00  # Cost per 1M input tokens
-    COST_PER_1M_OUTPUT_TOKENS = (
-        15.50  # Cost per 1M output tokens (2.5x input cost)
-    )
+    COST_PER_1M_OUTPUT_TOKENS = 15.50  # Cost per 1M output tokens (2.5x input cost)
 
     try:
         # Calculate input tokens for task
@@ -457,9 +425,7 @@ def calculate_swarm_cost(
 
             # Add system prompt tokens if present
             if agent.system_prompt:
-                agent_input_tokens += count_tokens(
-                    agent.system_prompt
-                )
+                agent_input_tokens += count_tokens(agent.system_prompt)
 
             # Add memory tokens if available
             try:
@@ -474,12 +440,8 @@ def calculate_swarm_cost(
 
             # Calculate actual output tokens if available, otherwise estimate
             if agent_outputs:
-                if isinstance(agent_outputs, list) and i < len(
-                    agent_outputs
-                ):
-                    agent_output_tokens = count_tokens(
-                        agent_outputs[i]
-                    )
+                if isinstance(agent_outputs, list) and i < len(agent_outputs):
+                    agent_output_tokens = count_tokens(agent_outputs[i])
                 elif isinstance(agent_outputs, str):
                     agent_output_tokens = count_tokens(agent_outputs)
                 else:
@@ -495,8 +457,7 @@ def calculate_swarm_cost(
             per_agent_tokens[agent.agent_name] = {
                 "input_tokens": agent_input_tokens,
                 "output_tokens": agent_output_tokens,
-                "total_tokens": agent_input_tokens
-                + agent_output_tokens,
+                "total_tokens": agent_input_tokens + agent_output_tokens,
             }
 
             # Add to totals
@@ -506,14 +467,10 @@ def calculate_swarm_cost(
         # Calculate costs (convert to millions of tokens)
         agent_cost = len(agents) * COST_PER_AGENT
         input_token_cost = (
-            (total_input_tokens / 1_000_000)
-            * COST_PER_1M_INPUT_TOKENS
-            * len(agents)
+            (total_input_tokens / 1_000_000) * COST_PER_1M_INPUT_TOKENS * len(agents)
         )
         output_token_cost = (
-            (total_output_tokens / 1_000_000)
-            * COST_PER_1M_OUTPUT_TOKENS
-            * len(agents)
+            (total_output_tokens / 1_000_000) * COST_PER_1M_OUTPUT_TOKENS * len(agents)
         )
 
         # Calculate total cost
@@ -527,8 +484,7 @@ def calculate_swarm_cost(
                 "token_counts": {
                     "total_input_tokens": total_input_tokens,
                     "total_output_tokens": total_output_tokens,
-                    "total_tokens": total_input_tokens
-                    + total_output_tokens,
+                    "total_tokens": total_input_tokens + total_output_tokens,
                     "per_agent": per_agent_tokens,
                 },
                 "num_agents": len(agents),
@@ -563,9 +519,7 @@ def health():
         Depends(verify_api_key),
     ],
 )
-async def run_swarm(
-    swarm: SwarmSpec, x_api_key=Header(...)
-) -> Dict[str, Any]:
+async def run_swarm(swarm: SwarmSpec, x_api_key=Header(...)) -> Dict[str, Any]:
     """
     Run a swarm with the specified task.
     """
@@ -591,9 +545,7 @@ async def run_batch_completions(
             result = await run_swarm_completion(swarm, x_api_key)
             results.append(result)
         except HTTPException as http_exc:
-            logger.error(
-                "HTTPException occurred: {}", http_exc.detail
-            )
+            logger.error("HTTPException occurred: {}", http_exc.detail)
             results.append(
                 {
                     "status": "error",
@@ -602,9 +554,7 @@ async def run_batch_completions(
                 }
             )
         except Exception as e:
-            logger.error(
-                "Error running swarm {}: {}", swarm.name, str(e)
-            )
+            logger.error("Error running swarm {}: {}", swarm.name, str(e))
             logger.exception(e)
             results.append(
                 {

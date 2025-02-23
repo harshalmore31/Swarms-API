@@ -17,51 +17,31 @@ unique_id = generate_id()
 
 
 class AgentSpec(BaseModel):
-    agent_name: Optional[str] = Field(
-        None, description="Agent Name", max_length=100
-    )
-    description: Optional[str] = Field(
-        None, description="Description", max_length=500
-    )
+    agent_name: Optional[str] = Field(None, description="Agent Name", max_length=100)
+    description: Optional[str] = Field(None, description="Description", max_length=500)
     system_prompt: Optional[str] = Field(
         None, description="System Prompt", max_length=500
     )
-    model_name: Optional[str] = Field(
-        None, description="Model Name", max_length=500
-    )
+    model_name: Optional[str] = Field(None, description="Model Name", max_length=500)
     auto_generate_prompt: Optional[bool] = Field(
         None, description="Auto Generate Prompt"
     )
     max_tokens: Optional[int] = Field(None, description="Max Tokens")
-    temperature: Optional[float] = Field(
-        None, description="Temperature"
-    )
+    temperature: Optional[float] = Field(None, description="Temperature")
     role: Optional[str] = Field(None, description="Role")
     max_loops: Optional[int] = Field(None, description="Max Loops")
 
 
 class Agents(BaseModel):
-    name: Optional[str] = Field(
-        None, description="Agent Name", max_length=100
-    )
-    description: Optional[str] = Field(
-        None, description="Description", max_length=500
-    )
-    agents: Optional[List[AgentSpec]] = Field(
-        None, description="Agents"
-    )
+    name: Optional[str] = Field(None, description="Agent Name", max_length=100)
+    description: Optional[str] = Field(None, description="Description", max_length=500)
+    agents: Optional[List[AgentSpec]] = Field(None, description="Agents")
 
 
 class SwarmSpec(BaseModel):
-    name: Optional[str] = Field(
-        None, description="Swarm Name", max_length=100
-    )
-    description: Optional[str] = Field(
-        None, description="Description", max_length=500
-    )
-    agents: Optional[List[AgentSpec]] = Field(
-        None, description="Agents"
-    )
+    name: Optional[str] = Field(None, description="Swarm Name", max_length=100)
+    description: Optional[str] = Field(None, description="Description", max_length=500)
+    agents: Optional[List[AgentSpec]] = Field(None, description="Agents")
     max_loops: Optional[int] = Field(None, description="Max Loops")
     swarm_type: Optional[str] = Field(None, description="Swarm Type")
     flow: Optional[str] = Field(None, description="Flow")

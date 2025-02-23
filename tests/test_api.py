@@ -24,17 +24,13 @@ def make_request(
         if method.lower() == "get":
             response = requests.get(url, headers=headers)
         else:
-            response = requests.post(
-                url, headers=headers, json=json_data
-            )
+            response = requests.post(url, headers=headers, json=json_data)
 
         # Try to get JSON response
         try:
             result = response.json()
         except requests.exceptions.JSONDecodeError:
-            result = {
-                "error": f"Invalid JSON response: {response.text}"
-            }
+            result = {"error": f"Invalid JSON response: {response.text}"}
 
         return {
             "status_code": response.status_code,
@@ -46,9 +42,7 @@ def make_request(
         return {
             "status_code": 503,
             "success": False,
-            "data": {
-                "error": f"Could not connect to {url}. Is the server running?"
-            },
+            "data": {"error": f"Could not connect to {url}. Is the server running?"},
         }
     except Exception as e:
         return {
@@ -147,9 +141,7 @@ def test_batch_completions():
         },
     ]
 
-    result = make_request(
-        "POST", "/v1/swarm/batch/completions", payload
-    )
+    result = make_request("POST", "/v1/swarm/batch/completions", payload)
     print(f"Status Code: {result['status_code']}")
     print(f"Response: {json.dumps(result['data'], indent=2)}")
     return result["success"]
