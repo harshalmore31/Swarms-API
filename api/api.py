@@ -1,6 +1,5 @@
 import os
 import time
-import uuid
 from decimal import Decimal
 from typing import Any, Dict, List, Optional, Union
 
@@ -20,6 +19,7 @@ from swarms import Agent, SwarmRouter, SwarmType
 from swarms.utils.litellm_tokenizer import count_tokens
 
 load_dotenv()
+
 
 class AgentSpec(BaseModel):
     agent_name: Optional[str] = Field(
@@ -45,7 +45,6 @@ class AgentSpec(BaseModel):
     max_loops: Optional[int] = Field(1, description="Max Loops")
 
 
-
 class SwarmSpec(BaseModel):
     name: Optional[str] = Field(
         None, description="Swarm Name", max_length=100
@@ -57,7 +56,9 @@ class SwarmSpec(BaseModel):
         None, description="Agents"
     )
     max_loops: Optional[int] = Field(None, description="Max Loops")
-    swarm_type: Optional[SwarmType] = Field(None, description="Swarm Type")
+    swarm_type: Optional[SwarmType] = Field(
+        None, description="Swarm Type"
+    )
     flow: Optional[str] = Field(None, description="Flow")
     task: Optional[str] = Field(None, description="Task")
     img: Optional[str] = Field(None, description="Img")
@@ -68,7 +69,9 @@ def create_swarm(swarm_spec: SwarmSpec) -> SwarmRouter:
     try:
         # Validate swarm_spec
         if not swarm_spec.agents:
-            raise ValueError("Swarm specification must include at least one agent.")
+            raise ValueError(
+                "Swarm specification must include at least one agent."
+            )
 
         agents = []
         for agent_spec in swarm_spec.agents:
@@ -92,16 +95,28 @@ def create_swarm(swarm_spec: SwarmSpec) -> SwarmRouter:
                     max_loops=agent_spec.max_loops,
                 )
                 agents.append(agent)
-                logger.info("Successfully created agent: {}", agent_spec.agent_name)
+                logger.info(
+                    "Successfully created agent: {}",
+                    agent_spec.agent_name,
+                )
             except ValueError as ve:
-                logger.error("Validation error for agent {}: {}", agent_spec.agent_name, str(ve))
+                logger.error(
+                    "Validation error for agent {}: {}",
+                    agent_spec.agent_name,
+                    str(ve),
+                )
             except Exception as agent_error:
-                logger.error("Error creating agent {}: {}", agent_spec.agent_name, str(agent_error))
+                logger.error(
+                    "Error creating agent {}: {}",
+                    agent_spec.agent_name,
+                    str(agent_error),
+                )
 
         if not agents:
-            raise ValueError("No valid agents could be created from the swarm specification.")
+            raise ValueError(
+                "No valid agents could be created from the swarm specification."
+            )
 
-                
         # Create and configure the swarm
         swarm = SwarmRouter(
             name=swarm_spec.name,
@@ -121,41 +136,41 @@ def create_swarm(swarm_spec: SwarmSpec) -> SwarmRouter:
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to create swarm: {str(e)}",
         )
-        
-        
+
 
 # Add this function after your get_supabase_client() function
 async def log_api_request(api_key: str, data: Dict[str, Any]) -> None:
     """
     Log API request data to Supabase swarms_api_logs table.
-    
+
     Args:
         api_key: The API key used for the request
         data: Dictionary containing request data to log
     """
     try:
         supabase_client = get_supabase_client()
-        
+
         # Create log entry
         log_entry = {
             "api_key": api_key,
             "data": data,
         }
-        
+
         # Insert into swarms_api_logs table
         response = (
             supabase_client.table("swarms_api_logs")
             .insert(log_entry)
             .execute()
         )
-        
+
         print(response)
-        
+
         if not response.data:
             logger.error("Failed to log API request")
-            
+
     except Exception as e:
         logger.error(f"Error logging API request: {str(e)}")
+
 
 def get_supabase_client():
     supabase_url = os.getenv("SUPABASE_URL")
@@ -217,7 +232,7 @@ async def run_swarm_completion(
         swarm_name = swarm.name
 
         agents = swarm.agents
-        
+
         await log_api_request(x_api_key, swarm.model_dump())
 
         # Log start of swarm execution
@@ -277,7 +292,7 @@ async def run_swarm_completion(
         }
         logger.info(response)
         await log_api_request(x_api_key, response)
-        
+
         return response
 
     except HTTPException as http_exc:
@@ -533,7 +548,7 @@ def calculate_swarm_cost(
 @app.get("/")
 def root():
     return {
-        "status": "Welcome to the SwarmCloud API. Check out the docs at https://docs.swarms.world"
+        "status": "Welcome to the Swarm API. Check out the docs at https://docs.swarms.world"
     }
 
 
@@ -555,6 +570,7 @@ async def run_swarm(
     Run a swarm with the specified task.
     """
     return await run_swarm_completion(swarm, x_api_key)
+
 
 @app.post(
     "/v1/swarm/batch/completions",

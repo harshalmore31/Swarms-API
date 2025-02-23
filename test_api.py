@@ -90,7 +90,7 @@ def test_batch_swarm():
                     "model_name": "gpt-4o",
                     "role": "worker",
                     "max_loops": 1,
-                }
+                },
             ],
             "max_loops": 1,
             "swarm_type": "SequentialWorkflow",
@@ -115,7 +115,7 @@ def test_batch_swarm():
                     "model_name": "gpt-4o",
                     "role": "worker",
                     "max_loops": 1,
-                }
+                },
             ],
             "max_loops": 1,
             "swarm_type": "SequentialWorkflow",
@@ -145,6 +145,7 @@ def run_all_tests():
     print(test_run_swarm())
 
     print(test_batch_swarm())
+
 
 if __name__ == "__main__":
     print("Starting API tests...")
