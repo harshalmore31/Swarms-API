@@ -108,3 +108,9 @@ Required environment variables:
 - `SUPABASE_URL`: Your Supabase project URL
 - `SUPABASE_KEY`: Your Supabase API key
 - `SWARMS_API_KEY`: For testing purposes
+
+
+# Todo
+
+- [] Add in a new query method to query the history of the swarm
+- [ ]

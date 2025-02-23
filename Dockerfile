@@ -20,10 +20,6 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/*
 
 
-RUN pip install supabase
-RUN pip install -U swarms
-RUN pip install torch
-RUN pip install transformers
 
 # Copy the API source code into the container
 COPY api/ .
@@ -37,4 +33,4 @@ USER appuser
 EXPOSE 8080
 
 # Start the API using Uvicorn
-CMD ["uvicorn", "api:app", "--host", "0.0.0.0", "--port", "8080"]
+CMD ["uvicorn", "api:app", "--host", "0.0.0.0", "--port", "8080", "--reload"]
