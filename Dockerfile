@@ -22,6 +22,7 @@ RUN apt-get update && \
 
 RUN pip install supabase
 RUN pip install -U swarms
+RUN pip install torch
 
 # Copy the API source code into the container
 COPY api/ .
