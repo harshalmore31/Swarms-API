@@ -34,5 +34,5 @@ USER appuser
 # Expose port 80 for the application
 EXPOSE 8080
 
-# Start the API using Gunicorn with Uvicorn workers
-CMD ["gunicorn", "api:app", "-w", "4", "-k", "uvicorn.workers.UvicornWorker", "--bind", "0.0.0.0:8080"]
+# Start the API using Uvicorn
+CMD ["uvicorn", "api:app", "--host", "0.0.0.0", "--port", "8080"]
