@@ -1,77 +1,110 @@
-[![Multi-Modality](agorabanner.png)](https://discord.gg/qUtxnK2NMf)
-
-# Multi-Agent Template App
+# Swarms API 
 
 [![Join our Discord](https://img.shields.io/badge/Discord-Join%20our%20server-5865F2?style=for-the-badge&logo=discord&logoColor=white)](https://discord.gg/agora-999382051935506503) [![Subscribe on YouTube](https://img.shields.io/badge/YouTube-Subscribe-red?style=for-the-badge&logo=youtube&logoColor=white)](https://www.youtube.com/@kyegomez3242) [![Connect on LinkedIn](https://img.shields.io/badge/LinkedIn-Connect-blue?style=for-the-badge&logo=linkedin&logoColor=white)](https://www.linkedin.com/in/kye-g-38759a207/) [![Follow on X.com](https://img.shields.io/badge/X.com-Follow-1DA1F2?style=for-the-badge&logo=x&logoColor=white)](https://x.com/kyegomezb)
 
 A radically simple, reliable, and high performance template to enable you to quickly get set up building multi-agent applications
 
+## Features
+
+- **Swarms API**: A powerful REST API for managing and executing multi-agent systems
+- **Test Suite**: Comprehensive testing framework for API endpoints
+- **Docker Support**: Containerized deployment ready
+- **Supabase Integration**: Built-in database support for logging and API key management
 
 
+## Swarms API
 
-## Installation
+The Swarms API provides endpoints for running single and batch agent swarm operations.
 
-You can install the package using pip
+### API Endpoints
+
+- `GET /health` - Health check endpoint
+- `POST /v1/swarm/completions` - Run a single swarm completion
+- `POST /v1/swarm/batch/completions` - Run multiple swarm completions in batch
+
+### Authentication
+
+All API endpoints (except health check) require an API key passed in the `x-api-key` header:
 
 ```bash
-$ pip3 install -r requirements.txt
+curl -H "x-api-key: your_api_key" -H "Content-Type: application/json" -X POST https://api.swarms.world/v1/swarm/completions
 ```
 
+### Example Usage
 
-### Code Quality 🧹
+Here's a basic example of running a swarm:
 
-- `make style` to format the code
-- `make check_code_quality` to check code quality (PEP8 basically)
-- `black .`
-- `ruff . --fix`
+```python
+import requests
 
-### Tests 🧪
+API_KEY = "your_api_key"
+BASE_URL = "https://api.swarms.world"
 
-[`pytests`](https://docs.pytest.org/en/7.1.x/) is used to run our tests.
-
-### Publish on PyPi 🚀
-
-**Important**: Before publishing, edit `__version__` in [src/__init__](/src/__init__.py) to match the wanted new version.
-
-```
-poetry build
-poetry publish
-```
-
-### CI/CD 🤖
-
-We use [GitHub actions](https://github.com/features/actions) to automatically run tests and check code quality when a new PR is done on `main`.
-
-On any pull request, we will check the code quality and tests.
-
-When a new release is created, we will try to push the new code to PyPi. We use [`twine`](https://twine.readthedocs.io/en/stable/) to make our life easier. 
-
-The **correct steps** to create a new realease are the following:
-- edit `__version__` in [src/__init__](/src/__init__.py) to match the wanted new version.
-- create a new [`tag`](https://git-scm.com/docs/git-tag) with the release name, e.g. `git tag v0.0.1 && git push origin v0.0.1` or from the GitHub UI.
-- create a new release from GitHub UI
-
-The CI will run when you create the new release.
-
-# Docs
-We use MK docs. This repo comes with the zeta docs. All the docs configurations are already here along with the readthedocs configs.
-
-
-
-# License
-MIT
-
-
-# Citation
-Please cite Swarms in your paper or your project if you found it beneficial in any way! Appreciate you.
-
-```bibtex
-@misc{swarms,
-  author = {Gomez, Kye},
-  title = {{Swarms: The Multi-Agent Collaboration Framework}},
-  howpublished = {\url{https://github.com/kyegomez/swarms}},
-  year = {2023},
-  note = {Accessed: Date}
+payload = {
+    "name": "Test Swarm",
+    "description": "A test swarm",
+    "agents": [
+        {
+            "agent_name": "Research Agent",
+            "description": "Conducts research",
+            "system_prompt": "You are a research assistant.",
+            "model_name": "gpt-4o",
+            "role": "worker",
+            "max_loops": 1
+        }
+    ],
+    "max_loops": 1,
+    "swarm_type": "ConcurrentWorkflow",
+    "task": "Write a short blog post about AI agents."
 }
+
+headers = {
+    "x-api-key": API_KEY,
+    "Content-Type": "application/json"
+}
+
+response = requests.post(
+    f"{BASE_URL}/v1/swarm/completions",
+    headers=headers,
+    json=payload
+)
 ```
 
+## Test Suite
+
+The project includes a comprehensive test suite in `test_api.py`. To run the tests:
+
+```bash
+# Set your API key in .env file first
+SWARMS_API_KEY=your_api_key
+
+# Run tests
+python test_api.py
+```
+
+The test suite includes:
+- Health check testing
+- Single swarm completion testing
+- Batch swarm completion testing
+
+## Docker Configuration
+
+To run the API using Docker:
+
+```bash
+# Build the image
+docker build -t swarms-api .
+
+# Run the container
+docker run -p 8080:8080 \
+  -e SUPABASE_URL=your_supabase_url \
+  -e SUPABASE_KEY=your_supabase_key \
+  swarms-api
+```
+
+### Environment Variables
+
+Required environment variables:
+- `SUPABASE_URL`: Your Supabase project URL
+- `SUPABASE_KEY`: Your Supabase API key
+- `SWARMS_API_KEY`: For testing purposes
