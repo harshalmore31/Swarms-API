@@ -7,3 +7,5 @@ gunicorn
 python-dotenv
 supabase
 loguru
+torch
+transformers
