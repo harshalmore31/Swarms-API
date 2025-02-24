@@ -1,6 +1,7 @@
 import os
 import time
 from decimal import Decimal
+from functools import lru_cache
 from typing import Any, Dict, List, Optional, Union
 
 import supabase
@@ -58,6 +59,7 @@ def get_supabase_client():
     return supabase.create_client(supabase_url, supabase_key)
 
 
+@lru_cache(maxsize=1000)
 def check_api_key(api_key: str) -> bool:
     supabase_client = get_supabase_client()
     response = (
@@ -69,6 +71,7 @@ def check_api_key(api_key: str) -> bool:
     return bool(response.data)
 
 
+@lru_cache(maxsize=1000)
 def get_user_id_from_api_key(api_key: str) -> str:
     """
     Maps an API key to its associated user ID.
@@ -102,7 +105,7 @@ def verify_api_key(x_api_key: str = Header(...)) -> None:
         raise HTTPException(status_code=403, detail="Invalid API Key")
 
 
-# Add after the get_supabase_client() function
+
 async def get_api_key_logs(api_key: str) -> List[Dict[str, Any]]:
     """
     Retrieve all API request logs for a specific API key.
@@ -123,10 +126,6 @@ async def get_api_key_logs(api_key: str) -> List[Dict[str, Any]]:
             .eq("api_key", api_key)
             .execute()
         )
-
-        print(response)
-
-
         return response.data
 
     except Exception as e:
@@ -138,7 +137,6 @@ async def get_api_key_logs(api_key: str) -> List[Dict[str, Any]]:
 
 
 def create_swarm(swarm_spec: SwarmSpec) -> SwarmRouter:
-    print(swarm_spec)
     try:
         # Validate swarm_spec
         if not swarm_spec.agents:
@@ -232,8 +230,6 @@ async def log_api_request(api_key: str, data: Dict[str, Any]) -> None:
 
         # Insert into swarms_api_logs table
         response = supabase_client.table("swarms_api_logs").insert(log_entry).execute()
-
-        print(response)
 
         if not response.data:
             logger.error("Failed to log API request")
@@ -618,7 +614,6 @@ async def get_logs(x_api_key: str = Header(...)) -> Dict[str, Any]:
     """
     try:
         logs = await get_api_key_logs(x_api_key)
-        print(logs)
         return {"status": "success", "count": len(logs), "logs": logs}
     except Exception as e:
         logger.error(f"Error in get_logs endpoint: {str(e)}")
