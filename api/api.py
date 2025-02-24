@@ -105,7 +105,6 @@ def verify_api_key(x_api_key: str = Header(...)) -> None:
         raise HTTPException(status_code=403, detail="Invalid API Key")
 
 
-
 async def get_api_key_logs(api_key: str) -> List[Dict[str, Any]]:
     """
     Retrieve all API request logs for a specific API key.
@@ -293,6 +292,7 @@ async def run_swarm_completion(
             "swarm_name": swarm_name,
             "description": swarm.description,
             "task": swarm.task,
+            "output": result,
             "metadata": {
                 "max_loops": swarm.max_loops,
                 "num_agents": len(agents),
@@ -300,7 +300,6 @@ async def run_swarm_completion(
                 "completion_time": time.time(),
                 "billing_info": cost_info,
             },
-            "output": result,
         }
         logger.info(response)
         await log_api_request(x_api_key, response)
