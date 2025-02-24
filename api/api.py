@@ -50,6 +50,43 @@ class SwarmSpec(BaseModel):
     img: Optional[str] = Field(None, description="Img")
 
 
+
+# Add after the get_supabase_client() function
+async def get_api_key_logs(api_key: str) -> List[Dict[str, Any]]:
+    """
+    Retrieve all API request logs for a specific API key.
+
+    Args:
+        api_key: The API key to query logs for
+
+    Returns:
+        List[Dict[str, Any]]: List of log entries for the API key
+    """
+    try:
+        supabase_client = get_supabase_client()
+        
+        # Query swarms_api_logs table for entries matching the API key
+        response = (
+            supabase_client.table("swarms_api_logs")
+            .select("*")
+            .eq("api_key", api_key)
+            .order("created_at", desc=True)  # Most recent first
+            .execute()
+        )
+
+        if not response.data:
+            return []
+
+        return response.data
+
+    except Exception as e:
+        logger.error(f"Error retrieving API logs: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to retrieve API logs: {str(e)}"
+        )
+
+
 def create_swarm(swarm_spec: SwarmSpec) -> SwarmRouter:
     print(swarm_spec)
     try:
@@ -565,6 +602,31 @@ async def run_batch_completions(
             )
 
     return results
+
+
+
+# Add this new endpoint
+@app.get(
+    "/v1/swarm/logs",
+    dependencies=[Depends(verify_api_key)],
+)
+async def get_logs(x_api_key: str = Header(...)) -> Dict[str, Any]:
+    """
+    Get all API request logs for the provided API key.
+    """
+    try:
+        logs = await get_api_key_logs(x_api_key)
+        return {
+            "status": "success",
+            "count": len(logs),
+            "logs": logs
+        }
+    except Exception as e:
+        logger.error(f"Error in get_logs endpoint: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
+        )
 
 
 # --- Main Entrypoint ---
