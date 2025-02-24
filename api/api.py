@@ -50,7 +50,6 @@ class SwarmSpec(BaseModel):
     img: Optional[str] = Field(None, description="Img")
 
 
-
 # Add after the get_supabase_client() function
 async def get_api_key_logs(api_key: str) -> List[Dict[str, Any]]:
     """
@@ -64,7 +63,7 @@ async def get_api_key_logs(api_key: str) -> List[Dict[str, Any]]:
     """
     try:
         supabase_client = get_supabase_client()
-        
+
         # Query swarms_api_logs table for entries matching the API key
         response = (
             supabase_client.table("swarms_api_logs")
@@ -83,7 +82,7 @@ async def get_api_key_logs(api_key: str) -> List[Dict[str, Any]]:
         logger.error(f"Error retrieving API logs: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to retrieve API logs: {str(e)}"
+            detail=f"Failed to retrieve API logs: {str(e)}",
         )
 
 
@@ -604,7 +603,6 @@ async def run_batch_completions(
     return results
 
 
-
 # Add this new endpoint
 @app.get(
     "/v1/swarm/logs",
@@ -616,16 +614,11 @@ async def get_logs(x_api_key: str = Header(...)) -> Dict[str, Any]:
     """
     try:
         logs = await get_api_key_logs(x_api_key)
-        return {
-            "status": "success",
-            "count": len(logs),
-            "logs": logs
-        }
+        return {"status": "success", "count": len(logs), "logs": logs}
     except Exception as e:
         logger.error(f"Error in get_logs endpoint: {str(e)}")
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(e)
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)
         )
 
 
