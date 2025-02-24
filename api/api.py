@@ -45,9 +45,61 @@ class SwarmSpec(BaseModel):
     agents: Optional[List[AgentSpec]] = Field(None, description="Agents")
     max_loops: Optional[int] = Field(None, description="Max Loops")
     swarm_type: Optional[SwarmType] = Field(None, description="Swarm Type")
-    flow: Optional[str] = Field(None, description="Flow")
+    rearrange_flow: Optional[str] = Field(None, description="Flow")
     task: Optional[str] = Field(None, description="Task")
     img: Optional[str] = Field(None, description="Img")
+    return_history: Optional[bool] = Field(True, description="Return History")
+    rules: Optional[str] = Field(None, description="Rules")
+
+
+def get_supabase_client():
+    supabase_url = os.getenv("SUPABASE_URL")
+    supabase_key = os.getenv("SUPABASE_KEY")
+    return supabase.create_client(supabase_url, supabase_key)
+
+
+def check_api_key(api_key: str) -> bool:
+    supabase_client = get_supabase_client()
+    response = (
+        supabase_client.table("swarms_cloud_api_keys")
+        .select("*")
+        .eq("key", api_key)
+        .execute()
+    )
+    return bool(response.data)
+
+
+def get_user_id_from_api_key(api_key: str) -> str:
+    """
+    Maps an API key to its associated user ID.
+
+    Args:
+        api_key (str): The API key to look up
+
+    Returns:
+        str: The user ID associated with the API key
+
+    Raises:
+        ValueError: If the API key is invalid or not found
+    """
+    supabase_client = get_supabase_client()
+    response = (
+        supabase_client.table("swarms_cloud_api_keys")
+        .select("user_id")
+        .eq("key", api_key)
+        .execute()
+    )
+    if not response.data:
+        raise ValueError("Invalid API key")
+    return response.data[0]["user_id"]
+
+
+def verify_api_key(x_api_key: str = Header(...)) -> None:
+    """
+    Dependency to verify the API key.
+    """
+    if not check_api_key(x_api_key):
+        raise HTTPException(status_code=403, detail="Invalid API Key")
 
 
 # Add after the get_supabase_client() function
@@ -69,12 +121,11 @@ async def get_api_key_logs(api_key: str) -> List[Dict[str, Any]]:
             supabase_client.table("swarms_api_logs")
             .select("*")
             .eq("api_key", api_key)
-            .order("created_at", desc=True)  # Most recent first
             .execute()
         )
 
-        if not response.data:
-            return []
+        print(response)
+
 
         return response.data
 
@@ -145,6 +196,9 @@ def create_swarm(swarm_spec: SwarmSpec) -> SwarmRouter:
             max_loops=swarm_spec.max_loops,
             swarm_type=swarm_spec.swarm_type,
             output_type="all",
+            return_entire_history=swarm_spec.return_history,
+            rules=swarm_spec.rules,
+            rearrange_flow=swarm_spec.rearrange_flow,
         )
 
         # Run the swarm task
@@ -186,56 +240,6 @@ async def log_api_request(api_key: str, data: Dict[str, Any]) -> None:
 
     except Exception as e:
         logger.error(f"Error logging API request: {str(e)}")
-
-
-def get_supabase_client():
-    supabase_url = os.getenv("SUPABASE_URL")
-    supabase_key = os.getenv("SUPABASE_KEY")
-    return supabase.create_client(supabase_url, supabase_key)
-
-
-def check_api_key(api_key: str) -> bool:
-    supabase_client = get_supabase_client()
-    response = (
-        supabase_client.table("swarms_cloud_api_keys")
-        .select("*")
-        .eq("key", api_key)
-        .execute()
-    )
-    return bool(response.data)
-
-
-def get_user_id_from_api_key(api_key: str) -> str:
-    """
-    Maps an API key to its associated user ID.
-
-    Args:
-        api_key (str): The API key to look up
-
-    Returns:
-        str: The user ID associated with the API key
-
-    Raises:
-        ValueError: If the API key is invalid or not found
-    """
-    supabase_client = get_supabase_client()
-    response = (
-        supabase_client.table("swarms_cloud_api_keys")
-        .select("user_id")
-        .eq("key", api_key)
-        .execute()
-    )
-    if not response.data:
-        raise ValueError("Invalid API key")
-    return response.data[0]["user_id"]
-
-
-def verify_api_key(x_api_key: str = Header(...)) -> None:
-    """
-    Dependency to verify the API key.
-    """
-    if not check_api_key(x_api_key):
-        raise HTTPException(status_code=403, detail="Invalid API Key")
 
 
 async def run_swarm_completion(
@@ -404,25 +408,6 @@ def deduct_credits(api_key: str, amount: float, product_name: str) -> None:
         )
 
 
-# --- FastAPI Application Setup ---
-
-app = FastAPI(
-    title="Swarm Agent API",
-    description="API for managing and executing Python agents in the cloud without Docker/Kubernetes.",
-    version="1.0.0",
-    debug=True,
-)
-
-# Enable CORS (adjust origins as needed)
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],  # In production, restrict this to specific domains
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-
 def calculate_swarm_cost(
     agents: List[Agent],
     input_text: str,
@@ -537,6 +522,25 @@ def calculate_swarm_cost(
         raise ValueError(f"Failed to calculate swarm cost: {str(e)}")
 
 
+# --- FastAPI Application Setup ---
+
+app = FastAPI(
+    title="Swarm Agent API",
+    description="API for managing and executing Python agents in the cloud without Docker/Kubernetes.",
+    version="1.0.0",
+    debug=True,
+)
+
+# Enable CORS (adjust origins as needed)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # In production, restrict this to specific domains
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
 @app.get("/")
 def root():
     return {
@@ -614,6 +618,7 @@ async def get_logs(x_api_key: str = Header(...)) -> Dict[str, Any]:
     """
     try:
         logs = await get_api_key_logs(x_api_key)
+        print(logs)
         return {"status": "success", "count": len(logs), "logs": logs}
     except Exception as e:
         logger.error(f"Error in get_logs endpoint: {str(e)}")
@@ -627,4 +632,4 @@ async def get_logs(x_api_key: str = Header(...)) -> Dict[str, Any]:
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run(app, host="0.0.0.0", port=8080, reload=True)
+    uvicorn.run(app, host="0.0.0.0", port=8080)

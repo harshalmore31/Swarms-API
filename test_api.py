@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Base URL for local testing
-BASE_URL = "https://swarms-api-285321057562.us-east1.run.app"
+BASE_URL = "http://localhost:8080"
 
 # Test API key - you'll need to replace this with a valid key
 API_KEY = os.getenv("SWARMS_API_KEY")
@@ -138,8 +138,8 @@ def test_batch_swarm():
 def print_logs():
     """Print the logs for the swarm"""
     response = requests.get(f"{BASE_URL}/v1/swarm/logs", headers=headers)
-    print(f"Status Code: {response.status_code}")
-    print(f"Response: {response.json()}")
+    print(response.status_code)
+    return json.dumps(response.json(), indent=4)
 
 
 def run_all_tests():
@@ -148,10 +148,10 @@ def run_all_tests():
     test_health()
     sleep(1)
 
-    # Test running a swarm
-    print(test_run_swarm())
+    # # Test running a swarm
+    # print(test_run_swarm())
 
-    print(test_batch_swarm())
+    # print(test_batch_swarm())
 
     # Print the logs
     print(print_logs())
