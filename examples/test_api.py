@@ -7,7 +7,7 @@ from typing import Dict, Any, Optional
 BASE_URL = "http://localhost:8080"
 
 # Test API key - replace with your valid key from .env
-API_KEY = "sk-855b33490139c9cb0945692af14ef1cfae701a8b82ed1035f0302f07298cb4f9"
+API_KEY = ""
 
 # Headers used for all requests
 headers = {"x-api-key": API_KEY, "Content-Type": "application/json"}

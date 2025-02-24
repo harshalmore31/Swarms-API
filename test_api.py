@@ -135,6 +135,13 @@ def test_batch_swarm():
     return json.dumps(response.json(), indent=4)
 
 
+def print_logs():
+    """Print the logs for the swarm"""
+    response = requests.get(f"{BASE_URL}/v1/swarm/logs", headers=headers)
+    print(f"Status Code: {response.status_code}")
+    print(f"Response: {response.json()}")
+
+
 def run_all_tests():
     """Run all tests with some delay between them"""
     # Test basic health endpoint
@@ -145,6 +152,9 @@ def run_all_tests():
     print(test_run_swarm())
 
     print(test_batch_swarm())
+
+    # Print the logs
+    print(print_logs())
 
 
 if __name__ == "__main__":
