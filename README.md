@@ -46,39 +46,90 @@ curl -H "x-api-key: your_api_key" -H "Content-Type: application/json" -X POST ht
 Here's a basic example of running a swarm:
 
 ```python
+# tools - search, code executor, create api
+
+import os
 import requests
+from dotenv import load_dotenv
+import json
 
-API_KEY = "your_api_key"
-BASE_URL = "https://api.swarms.world"
+load_dotenv()
 
-payload = {
-    "name": "Test Swarm",
-    "description": "A test swarm",
-    "agents": [
-        {
-            "agent_name": "Research Agent",
-            "description": "Conducts research",
-            "system_prompt": "You are a research assistant.",
-            "model_name": "gpt-4o",
-            "role": "worker",
-            "max_loops": 1
-        }
-    ],
-    "max_loops": 1,
-    "swarm_type": "ConcurrentWorkflow",
-    "task": "Write a short blog post about AI agents."
-}
+API_KEY = os.getenv("SWARMS_API_KEY")
+BASE_URL = "https://swarms-api-285321057562.us-east1.run.app"
 
-headers = {
-    "x-api-key": API_KEY,
-    "Content-Type": "application/json"
-}
+headers = {"x-api-key": API_KEY, "Content-Type": "application/json"}
 
-response = requests.post(
-    f"{BASE_URL}/v1/swarm/completions",
-    headers=headers,
-    json=payload
-)
+
+def run_health_check():
+    response = requests.get(f"{BASE_URL}/health", headers=headers)
+    return response.json()
+
+
+def run_single_swarm():
+    payload = {
+        "name": "Financial Analysis Swarm",
+        "description": "Market analysis swarm",
+        "agents": [
+            {
+                "agent_name": "Market Analyst",
+                "description": "Analyzes market trends",
+                "system_prompt": "You are a financial analyst expert.",
+                "model_name": "groq/deepseek-r1-distill-qwen-32b",
+                "role": "worker",
+                "max_loops": 1,
+                "max_tokens": 8192,
+            },
+            {
+                "agent_name": "Economic Forecaster",
+                "description": "Predicts economic trends",
+                "system_prompt": "You are an expert in economic forecasting.",
+                "model_name": "groq/deepseek-r1-distill-qwen-32b",
+                "role": "worker",
+                "max_loops": 1,
+                "max_tokens": 8192,
+            },
+            {
+                "agent_name": "Data Scientist",
+                "description": "Performs data analysis",
+                "system_prompt": "You are a data science expert.",
+                "model_name": "groq/deepseek-r1-distill-qwen-32b",
+                "role": "worker",
+                "max_loops": 1,
+                "max_tokens": 8192,
+            },
+        ],
+        "max_loops": 1,
+        "swarm_type": "ConcurrentWorkflow",
+        "task": "What are the best etfs and index funds for ai and tech?",
+        "output_type": "str",
+        "return_history": True,
+    }
+
+    response = requests.post(
+        f"{BASE_URL}/v1/swarm/completions",
+        headers=headers,
+        json=payload,
+    )
+
+    # return response.json()
+    output = response.json()
+
+    return json.dumps(output, indent=4)
+
+
+def get_logs():
+    response = requests.get(
+        f"{BASE_URL}/v1/swarm/logs", headers=headers
+    )
+    output = response.json()
+    return json.dumps(output, indent=4)
+
+
+if __name__ == "__main__":
+    result = run_single_swarm()
+    print("Swarm Result:")
+    print(result)
 ```
 
 ## Test Suite
@@ -113,15 +164,9 @@ docker run -p 8080:8080 \
   swarms-api
 ```
 
-### Environment Variables
-
-Required environment variables:
-- `SUPABASE_URL`: Your Supabase project URL
-- `SUPABASE_KEY`: Your Supabase API key
-- `SWARMS_API_KEY`: For testing purposes
-- `OPENAI_API_KEY`:
-
 
 # Todo
 
 - [ ] Add tool usage to the swarm for every agent
+- [ ] Add more conversation history. Add output list of dictionaries from the self.conversation to capture the agent outputs in a cleaner way than just a string.
+- [ ] Add rag for input docs like pdf, csvs, and more, add pricing of rag depending on the number of tokens in the rag
