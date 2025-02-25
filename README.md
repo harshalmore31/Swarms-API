@@ -170,3 +170,4 @@ docker run -p 8080:8080 \
 - [ ] Add tool usage to the swarm for every agent
 - [ ] Add more conversation history. Add output list of dictionaries from the self.conversation to capture the agent outputs in a cleaner way than just a string.
 - [ ] Add rag for input docs like pdf, csvs, and more, add pricing of rag depending on the number of tokens in the rag
+- [ ] Add async streaming output 
