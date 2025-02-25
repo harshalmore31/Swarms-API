@@ -214,10 +214,12 @@ def create_swarm(swarm_spec: SwarmSpec) -> SwarmRouter:
             rules=swarm_spec.rules,
             rearrange_flow=swarm_spec.rearrange_flow,
         )
+        
+        full_history = swarm.swarm.conversation.return_history_as_string()
 
         # Run the swarm task
         output = swarm.run(task=swarm_spec.task)
-        return output
+        return output, full_history
     except Exception as e:
         logger.error("Error creating swarm: {}", str(e))
         raise HTTPException(
@@ -273,7 +275,7 @@ async def run_swarm_completion(
 
         # Create and run the swarm
         logger.debug(f"Creating swarm object for {swarm_name}")
-        result = create_swarm(swarm)
+        result, full_history = create_swarm(swarm)
         logger.debug(f"Running swarm task: {swarm.task}")
 
         # Calculate execution time
@@ -287,7 +289,7 @@ async def run_swarm_completion(
         cost_info = calculate_swarm_cost(
             agents=agents,
             input_text=swarm.task,
-            agent_outputs=result,
+            agent_outputs=full_history,
             execution_time=execution_time,
         )
         logger.info(f"Cost calculation completed for swarm {swarm_name}: {cost_info}")
