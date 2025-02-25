@@ -215,11 +215,9 @@ def create_swarm(swarm_spec: SwarmSpec) -> SwarmRouter:
             rearrange_flow=swarm_spec.rearrange_flow,
         )
         
-        full_history = swarm.swarm.conversation.return_history_as_string()
-
         # Run the swarm task
         output = swarm.run(task=swarm_spec.task)
-        return output, full_history
+        return output
     except Exception as e:
         logger.error("Error creating swarm: {}", str(e))
         raise HTTPException(
@@ -275,7 +273,7 @@ async def run_swarm_completion(
 
         # Create and run the swarm
         logger.debug(f"Creating swarm object for {swarm_name}")
-        result, full_history = create_swarm(swarm)
+        result = create_swarm(swarm)
         logger.debug(f"Running swarm task: {swarm.task}")
 
         # Calculate execution time
@@ -289,7 +287,7 @@ async def run_swarm_completion(
         cost_info = calculate_swarm_cost(
             agents=agents,
             input_text=swarm.task,
-            agent_outputs=full_history,
+            agent_outputs=result,
             execution_time=execution_time,
         )
         logger.info(f"Cost calculation completed for swarm {swarm_name}: {cost_info}")
@@ -426,7 +424,7 @@ def calculate_swarm_cost(
     agents: List[Agent],
     input_text: str,
     execution_time: float,
-    agent_outputs: Union[List[str], str] = None,  # Add agent outputs parameter
+    agent_outputs: Union[List[Dict[str, str]], str] = None,  # Update agent_outputs type
 ) -> Dict[str, Any]:
     """
     Calculate the cost of running a swarm based on agents, tokens, and execution time.
@@ -436,7 +434,7 @@ def calculate_swarm_cost(
         agents: List of agents used in the swarm
         input_text: The input task/prompt text
         execution_time: Time taken to execute in seconds
-        agent_outputs: List of output texts from each agent
+        agent_outputs: List of output texts from each agent or a list of dictionaries
 
     Returns:
         Dict containing cost breakdown and total cost
@@ -475,8 +473,11 @@ def calculate_swarm_cost(
 
             # Calculate actual output tokens if available, otherwise estimate
             if agent_outputs:
-                if isinstance(agent_outputs, list) and i < len(agent_outputs):
-                    agent_output_tokens = count_tokens(agent_outputs[i])
+                if isinstance(agent_outputs, list):
+                    # Sum tokens for each dictionary's content
+                    agent_output_tokens = sum(
+                        count_tokens(message["content"]) for message in agent_outputs
+                    )
                 elif isinstance(agent_outputs, str):
                     agent_output_tokens = count_tokens(agent_outputs)
                 else:
@@ -528,13 +529,11 @@ def calculate_swarm_cost(
             "total_cost": round(total_cost, 6),
         }
 
-        # return json.dumps(output, indent=4)
         return output
 
     except Exception as e:
         logger.error(f"Error calculating swarm cost: {str(e)}")
         raise ValueError(f"Failed to calculate swarm cost: {str(e)}")
-
 
 # --- FastAPI Application Setup ---
 
