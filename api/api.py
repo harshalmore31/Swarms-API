@@ -308,6 +308,7 @@ async def run_swarm_completion(
             "status": "success",
             "swarm_name": swarm_name,
             "description": swarm.description,
+            "swarm_type": swarm.swarm_type,
             "task": swarm.task,
             "output": result,
             "metadata": {
