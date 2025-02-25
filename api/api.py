@@ -214,7 +214,7 @@ def create_swarm(swarm_spec: SwarmSpec) -> SwarmRouter:
             rules=swarm_spec.rules,
             rearrange_flow=swarm_spec.rearrange_flow,
         )
-        
+
         # Run the swarm task
         output = swarm.run(task=swarm_spec.task)
         return output
@@ -534,6 +534,7 @@ def calculate_swarm_cost(
     except Exception as e:
         logger.error(f"Error calculating swarm cost: {str(e)}")
         raise ValueError(f"Failed to calculate swarm cost: {str(e)}")
+
 
 # --- FastAPI Application Setup ---
 
