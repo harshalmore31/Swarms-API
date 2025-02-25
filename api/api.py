@@ -40,6 +40,7 @@ class AgentSpec(BaseModel):
     max_loops: Optional[int] = Field(1, description="Max Loops")
 
 
+
 class SwarmSpec(BaseModel):
     name: Optional[str] = Field(None, description="Swarm Name", max_length=100)
     description: Optional[str] = Field(None, description="Description", max_length=500)
@@ -192,7 +193,7 @@ def create_swarm(swarm_spec: SwarmSpec) -> SwarmRouter:
             agents=agents,
             max_loops=swarm_spec.max_loops,
             swarm_type=swarm_spec.swarm_type,
-            output_type="all",
+            output_type="dict",
             return_entire_history=swarm_spec.return_history,
             rules=swarm_spec.rules,
             rearrange_flow=swarm_spec.rearrange_flow,
