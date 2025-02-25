@@ -194,7 +194,7 @@ def create_swarm(swarm_spec: SwarmSpec) -> SwarmRouter:
             max_loops=swarm_spec.max_loops,
             swarm_type=swarm_spec.swarm_type,
             output_type="dict",
-            return_entire_history=swarm_spec.return_history,
+            return_entire_history=False,
             rules=swarm_spec.rules,
             rearrange_flow=swarm_spec.rearrange_flow,
         )
