@@ -40,11 +40,16 @@ class AgentSpec(BaseModel):
     max_loops: Optional[int] = Field(1, description="Max Loops")
 
 
+# class ExternalAgent(BaseModel):
+#     base_url: str = Field(..., description="Base URL")
+#     parameters: Dict[str, Any] = Field(..., description="Parameters")
+#     headers: Dict[str, Any] = Field(..., description="Headers")
+
 
 class SwarmSpec(BaseModel):
     name: Optional[str] = Field(None, description="Swarm Name", max_length=100)
     description: Optional[str] = Field(None, description="Description", max_length=500)
-    agents: Optional[List[AgentSpec]] = Field(None, description="Agents")
+    agents: Optional[Union[List[AgentSpec], Any]] = Field(None, description="Agents")
     max_loops: Optional[int] = Field(None, description="Max Loops")
     swarm_type: Optional[SwarmType] = Field(None, description="Swarm Type")
     rearrange_flow: Optional[str] = Field(None, description="Flow")
@@ -70,6 +75,17 @@ def check_api_key(api_key: str) -> bool:
         .execute()
     )
     return bool(response.data)
+
+
+# class ExternalAgent:
+#     def __init__(self, base_url: str, parameters: Dict[str, Any], headers: Dict[str, Any]):
+#         self.base_url = base_url
+#         self.parameters = parameters
+#         self.headers = headers
+
+#     def run(self, task: str) -> Dict[str, Any]:
+#         response = requests.post(self.base_url, json=self.parameters, headers=self.headers)
+#         return response.json()
 
 
 @lru_cache(maxsize=1000)
