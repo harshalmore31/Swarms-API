@@ -10,17 +10,17 @@ load_dotenv()
 API_BASE_URL = os.getenv("API_BASE_URL", "http://localhost:8000")
 API_KEY = os.getenv("API_KEY", "your-api-key-here")
 
-HEADERS = {
-    "x-api-key": API_KEY,
-    "Content-Type": "application/json"
-}
+HEADERS = {"x-api-key": API_KEY, "Content-Type": "application/json"}
 
-def test_endpoint(endpoint: str, method: str = "GET", data: Dict[str, Any] = None) -> Dict[str, Any]:
+
+def test_endpoint(
+    endpoint: str, method: str = "GET", data: Dict[str, Any] = None
+) -> Dict[str, Any]:
     """
     Generic test function for API endpoints
     """
     url = f"{API_BASE_URL}{endpoint}"
-    
+
     try:
         if method == "GET":
             response = requests.get(url, headers=HEADERS)
@@ -28,22 +28,20 @@ def test_endpoint(endpoint: str, method: str = "GET", data: Dict[str, Any] = Non
             response = requests.post(url, headers=HEADERS, json=data)
         else:
             raise ValueError(f"Unsupported HTTP method: {method}")
-        
+
         print(f"\n=== Testing {method} {endpoint} ===")
         print(f"Status Code: {response.status_code}")
         print(f"Response: {response.json()}")
-        
+
         return {
             "success": 200 <= response.status_code < 300,
             "status_code": response.status_code,
-            "response": response.json()
+            "response": response.json(),
         }
     except Exception as e:
         print(f"Error testing {endpoint}: {str(e)}")
-        return {
-            "success": False,
-            "error": str(e)
-        }
+        return {"success": False, "error": str(e)}
+
 
 def run_all_tests():
     """
@@ -85,14 +83,14 @@ def run_all_tests():
                 "system_prompt": "You are a helpful assistant",
                 "model_name": "gpt-4",
                 "temperature": 0.7,
-                "max_loops": 1
+                "max_loops": 1,
             }
         ],
         "task": "Say hello world",
         "max_loops": 1,
-        "return_history": True
+        "return_history": True,
     }
-    
+
     result = test_endpoint("/v1/swarm/completions", "POST", simple_swarm)
     total_tests += 1
     if result["success"]:
@@ -102,7 +100,10 @@ def run_all_tests():
         test_results.append(("Simple Swarm Completion", "❌ FAILED"))
 
     # Test 4: Batch Swarm Completion
-    batch_swarms = [simple_swarm, simple_swarm]  # Using the same swarm twice for testing
+    batch_swarms = [
+        simple_swarm,
+        simple_swarm,
+    ]  # Using the same swarm twice for testing
     result = test_endpoint("/v1/swarm/batch/completions", "POST", batch_swarms)
     total_tests += 1
     if result["success"]:
@@ -127,12 +128,15 @@ def run_all_tests():
         print(f"{test_name}: {result}")
 
     print(f"\nTests Completed in {execution_time:.2f} seconds")
-    print(f"Passed: {passed_tests}/{total_tests} ({(passed_tests/total_tests)*100:.1f}%)")
+    print(
+        f"Passed: {passed_tests}/{total_tests} ({(passed_tests/total_tests)*100:.1f}%)"
+    )
 
     if passed_tests == total_tests:
         print("\n✨ All tests passed successfully! ✨")
     else:
         print(f"\n⚠️  {total_tests - passed_tests} tests failed!")
 
+
 if __name__ == "__main__":
-    run_all_tests() 
+    run_all_tests()
