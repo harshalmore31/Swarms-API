@@ -7,8 +7,8 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Configuration
-API_BASE_URL = os.getenv("API_BASE_URL", "http://localhost:8000")
-API_KEY = os.getenv("API_KEY", "your-api-key-here")
+API_BASE_URL = os.getenv("API_BASE_URL", "http://localhost:8080")
+API_KEY = os.getenv("SWARMS_API_KEY")
 
 HEADERS = {"x-api-key": API_KEY, "Content-Type": "application/json"}
 

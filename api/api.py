@@ -1,7 +1,9 @@
+from collections import defaultdict
 import os
 import time
 from decimal import Decimal
 from functools import lru_cache
+from time import time
 from typing import Any, Dict, List, Optional, Union
 
 import supabase
@@ -11,6 +13,7 @@ from fastapi import (
     FastAPI,
     Header,
     HTTPException,
+    Request,
     status,
 )
 from fastapi.middleware.cors import CORSMiddleware
@@ -21,6 +24,32 @@ from swarms.utils.litellm_tokenizer import count_tokens
 
 load_dotenv()
 
+# Define rate limit parameters
+RATE_LIMIT = 100  # Max requests
+TIME_WINDOW = 60  # Time window in seconds
+
+# In-memory store for tracking requests
+request_counts = defaultdict(lambda: {"count": 0, "start_time": time()})
+
+def rate_limiter(request: Request):
+    client_ip = request.client.host
+    current_time = time()
+    client_data = request_counts[client_ip]
+
+    # Reset count if time window has passed
+    if current_time - client_data["start_time"] > TIME_WINDOW:
+        client_data["count"] = 0
+        client_data["start_time"] = current_time
+
+    # Increment request count
+    client_data["count"] += 1
+
+    # Check if rate limit is exceeded
+    if client_data["count"] > RATE_LIMIT:
+        raise HTTPException(
+            status_code=429,
+            detail="Rate limit exceeded. Please try again later."
+        )
 
 class AgentSpec(BaseModel):
     agent_name: Optional[str] = Field(None, description="Agent Name", max_length=100)
@@ -556,14 +585,14 @@ app.add_middleware(
 )
 
 
-@app.get("/")
+@app.get("/", dependencies=[Depends(rate_limiter)])
 def root():
     return {
         "status": "Welcome to the Swarm API. Check out the docs at https://docs.swarms.world"
     }
 
 
-@app.get("/health")
+@app.get("/health", dependencies=[Depends(rate_limiter)])
 def health():
     return {"status": "ok"}
 
@@ -572,6 +601,7 @@ def health():
     "/v1/swarm/completions",
     dependencies=[
         Depends(verify_api_key),
+        Depends(rate_limiter),
     ],
 )
 async def run_swarm(swarm: SwarmSpec, x_api_key=Header(...)) -> Dict[str, Any]:
@@ -585,6 +615,7 @@ async def run_swarm(swarm: SwarmSpec, x_api_key=Header(...)) -> Dict[str, Any]:
     "/v1/swarm/batch/completions",
     dependencies=[
         Depends(verify_api_key),
+        Depends(rate_limiter),
     ],
 )
 async def run_batch_completions(
@@ -625,7 +656,10 @@ async def run_batch_completions(
 # Add this new endpoint
 @app.get(
     "/v1/swarm/logs",
-    dependencies=[Depends(verify_api_key)],
+    dependencies=[
+        Depends(verify_api_key),
+        Depends(rate_limiter),
+    ],
 )
 async def get_logs(x_api_key: str = Header(...)) -> Dict[str, Any]:
     """
