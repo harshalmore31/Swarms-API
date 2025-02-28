@@ -641,6 +641,14 @@ async def get_logs(x_api_key: str = Header(...)) -> Dict[str, Any]:
         )
 
 
+# @app.post("/v1/swarm/cost-prediction")
+# async def cost_prediction(swarm: SwarmSpec) -> Dict[str, Any]:
+#     """
+#     Predict the cost of running a swarm.
+#     """
+#     return {"status": "success", "cost": calculate_swarm_cost(swarm)}
+
+
 # --- Main Entrypoint ---
 
 if __name__ == "__main__":
