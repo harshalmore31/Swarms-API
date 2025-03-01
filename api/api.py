@@ -31,6 +31,7 @@ TIME_WINDOW = 60  # Time window in seconds
 # In-memory store for tracking requests
 request_counts = defaultdict(lambda: {"count": 0, "start_time": time()})
 
+
 def rate_limiter(request: Request):
     client_ip = request.client.host
     current_time = time()
@@ -47,9 +48,9 @@ def rate_limiter(request: Request):
     # Check if rate limit is exceeded
     if client_data["count"] > RATE_LIMIT:
         raise HTTPException(
-            status_code=429,
-            detail="Rate limit exceeded. Please try again later."
+            status_code=429, detail="Rate limit exceeded. Please try again later."
         )
+
 
 class AgentSpec(BaseModel):
     agent_name: Optional[str] = Field(None, description="Agent Name", max_length=100)

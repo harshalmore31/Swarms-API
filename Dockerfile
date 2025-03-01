@@ -33,4 +33,4 @@ USER appuser
 EXPOSE 8080
 
 # Start the API using Uvicorn
-CMD ["uvicorn", "api:app", "--host", "0.0.0.0", "--port", "8080", "--reload"]
+CMD ["sh", "-c", "gunicorn api:app -w $(python -c 'import multiprocessing as mp; print(mp.cpu_count() * 2 + 1)') -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:8080"]
