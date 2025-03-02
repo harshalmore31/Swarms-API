@@ -298,7 +298,7 @@ async def run_swarm_completion(
 
         # Log start of swarm execution
         logger.info(f"Starting swarm {swarm_name} with {len(agents)} agents")
-        start_time = time.time()
+        start_time = time()
 
         # Create and run the swarm
         logger.debug(f"Creating swarm object for {swarm_name}")
@@ -306,7 +306,7 @@ async def run_swarm_completion(
         logger.debug(f"Running swarm task: {swarm.task}")
 
         # Calculate execution time
-        execution_time = time.time() - start_time
+        execution_time = time() - start_time
         logger.info(
             f"Swarm {swarm_name} executed in {round(execution_time, 2)} seconds"
         )
@@ -344,7 +344,7 @@ async def run_swarm_completion(
                 "max_loops": swarm.max_loops,
                 "num_agents": len(agents),
                 "execution_time_seconds": round(execution_time, 2),
-                "completion_time": time.time(),
+                "completion_time": time(),
                 "billing_info": cost_info,
             },
         }
