@@ -1,6 +1,5 @@
-from collections import defaultdict
 import os
-import time
+from collections import defaultdict
 from decimal import Decimal
 from functools import lru_cache
 from time import time
