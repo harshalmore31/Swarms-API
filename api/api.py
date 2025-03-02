@@ -1,5 +1,5 @@
-import os
 from collections import defaultdict
+import os
 from decimal import Decimal
 from functools import lru_cache
 from time import time
@@ -585,14 +585,14 @@ app.add_middleware(
 )
 
 
-@app.get("/", dependencies=[Depends(rate_limiter)])
+@app.get("/")
 def root():
     return {
         "status": "Welcome to the Swarm API. Check out the docs at https://docs.swarms.world"
     }
 
 
-@app.get("/health", dependencies=[Depends(rate_limiter)])
+@app.get("/health")
 def health():
     return {"status": "ok"}
 
@@ -601,7 +601,7 @@ def health():
     "/v1/swarm/completions",
     dependencies=[
         Depends(verify_api_key),
-        Depends(rate_limiter),
+        # Depends(rate_limiter),
     ],
 )
 async def run_swarm(swarm: SwarmSpec, x_api_key=Header(...)) -> Dict[str, Any]:
@@ -615,7 +615,7 @@ async def run_swarm(swarm: SwarmSpec, x_api_key=Header(...)) -> Dict[str, Any]:
     "/v1/swarm/batch/completions",
     dependencies=[
         Depends(verify_api_key),
-        Depends(rate_limiter),
+        # Depends(rate_limiter),
     ],
 )
 async def run_batch_completions(
@@ -658,7 +658,7 @@ async def run_batch_completions(
     "/v1/swarm/logs",
     dependencies=[
         Depends(verify_api_key),
-        Depends(rate_limiter),
+        # Depends(rate_limiter),
     ],
 )
 async def get_logs(x_api_key: str = Header(...)) -> Dict[str, Any]:
