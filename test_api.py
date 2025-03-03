@@ -16,14 +16,17 @@ API_KEY = os.getenv("SWARMS_API_KEY")
 # Headers used for all requests
 headers = {"x-api-key": API_KEY, "Content-Type": "application/json"}
 
-
-def test_health():
-    """Test the health check endpoint"""
-    response = requests.get(f"{BASE_URL}/health")
-    print("\n=== Health Check Test ===")
-    # print(f"Status Code: {response.status_code}")
-    # print(f"Response: {response.json()}")
-    print(response)
+def check_server_running():
+    """Check if the API server is running"""
+    try:
+        requests.get(f"{BASE_URL}/health", timeout=5)
+        return True
+    except requests.exceptions.ConnectionError:
+        print("\n❌ ERROR: Could not connect to the API server!")
+        print("\nPlease start the server first with:")
+        print("\nuvicorn api.api:app --host 0.0.0.0 --port 8080 --reload")
+        print("\nMake sure you're in the project root directory when running this command.")
+        return False
 
 
 def test_run_swarm():
@@ -145,7 +148,7 @@ def print_logs():
 def run_all_tests():
     """Run all tests with some delay between them"""
     # Test basic health endpoint
-    test_health()
+    check_server_running()
     sleep(1)
 
     # # Test running a swarm

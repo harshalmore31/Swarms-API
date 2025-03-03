@@ -1,9 +1,22 @@
-from collections import defaultdict
+"""
+- Add memory instances endpoints for each agent
+- create pricing formula for the memory usage
+- Upload docs to the swarms memory db and then the agents will retrieve it [time x tokens retrieval? how can we host it on the cloud?]
+- Add rate limiting 
+- Add prompting caching and more logic like this
+- make functions multi-threaded where possible to accelerate the script
+- 
+
+"""
+
 import os
+import asyncio
+from collections import defaultdict
 from decimal import Decimal
 from functools import lru_cache
-from time import time
+from time import time, sleep
 from typing import Any, Dict, List, Optional, Union
+from datetime import datetime
 
 import supabase
 from dotenv import load_dotenv
@@ -20,6 +33,8 @@ from loguru import logger
 from pydantic import BaseModel, Field
 from swarms import Agent, SwarmRouter, SwarmType
 from swarms.utils.litellm_tokenizer import count_tokens
+from threading import Thread
+import pytz
 
 load_dotenv()
 
@@ -29,6 +44,9 @@ TIME_WINDOW = 60  # Time window in seconds
 
 # In-memory store for tracking requests
 request_counts = defaultdict(lambda: {"count": 0, "start_time": time()})
+
+# In-memory store for scheduled jobs
+scheduled_jobs: Dict[str, Dict] = {}
 
 
 def rate_limiter(request: Request):
@@ -75,6 +93,11 @@ class AgentSpec(BaseModel):
 #     headers: Dict[str, Any] = Field(..., description="Headers")
 
 
+class ScheduleSpec(BaseModel):
+    scheduled_time: datetime = Field(..., description="When to execute the swarm (UTC)")
+    timezone: Optional[str] = Field("UTC", description="Timezone for the scheduled time")
+
+
 class SwarmSpec(BaseModel):
     name: Optional[str] = Field(None, description="Swarm Name", max_length=100)
     description: Optional[str] = Field(None, description="Description", max_length=500)
@@ -86,6 +109,8 @@ class SwarmSpec(BaseModel):
     img: Optional[str] = Field(None, description="Img")
     return_history: Optional[bool] = Field(True, description="Return History")
     rules: Optional[str] = Field(None, description="Rules")
+    schedule: Optional[ScheduleSpec] = Field(None, description="Scheduling information")
+    
 
 
 def get_supabase_client():
@@ -585,14 +610,14 @@ app.add_middleware(
 )
 
 
-@app.get("/")
+@app.get("/", dependencies=[Depends(rate_limiter)])
 def root():
     return {
         "status": "Welcome to the Swarm API. Check out the docs at https://docs.swarms.world"
     }
 
 
-@app.get("/health")
+@app.get("/health", dependencies=[Depends(rate_limiter)])
 def health():
     return {"status": "ok"}
 
@@ -601,7 +626,7 @@ def health():
     "/v1/swarm/completions",
     dependencies=[
         Depends(verify_api_key),
-        # Depends(rate_limiter),
+        Depends(rate_limiter),
     ],
 )
 async def run_swarm(swarm: SwarmSpec, x_api_key=Header(...)) -> Dict[str, Any]:
@@ -615,7 +640,7 @@ async def run_swarm(swarm: SwarmSpec, x_api_key=Header(...)) -> Dict[str, Any]:
     "/v1/swarm/batch/completions",
     dependencies=[
         Depends(verify_api_key),
-        # Depends(rate_limiter),
+        Depends(rate_limiter),
     ],
 )
 async def run_batch_completions(
@@ -658,7 +683,7 @@ async def run_batch_completions(
     "/v1/swarm/logs",
     dependencies=[
         Depends(verify_api_key),
-        # Depends(rate_limiter),
+        Depends(rate_limiter),
     ],
 )
 async def get_logs(x_api_key: str = Header(...)) -> Dict[str, Any]:
@@ -680,7 +705,183 @@ async def get_logs(x_api_key: str = Header(...)) -> Dict[str, Any]:
 #     """
 #     Predict the cost of running a swarm.
 #     """
-#     return {"status": "success", "cost": calculate_swarm_cost(swarm)}
+#     return {"status": "success", "cost": calculate_swarm_cost(swarm)})
+
+class ScheduledJob(Thread):
+    def __init__(self, job_id: str, scheduled_time: datetime, swarm: SwarmSpec, api_key: str):
+        super().__init__()
+        self.job_id = job_id
+        self.scheduled_time = scheduled_time
+        self.swarm = swarm
+        self.api_key = api_key
+        self.daemon = True  # Allow the thread to be terminated when main program exits
+        self.cancelled = False
+
+    def run(self):
+        while not self.cancelled:
+            now = datetime.now(pytz.UTC)
+            if now >= self.scheduled_time:
+                try:
+                    # Execute the swarm
+                    asyncio.run(run_swarm_completion(self.swarm, self.api_key))
+                except Exception as e:
+                    logger.error(f"Error executing scheduled swarm {self.job_id}: {str(e)}")
+                finally:
+                    # Remove the job from scheduled_jobs after execution
+                    scheduled_jobs.pop(self.job_id, None)
+                break
+            sleep(1)  # Check every second
+
+@app.post(
+    "/v1/swarm/schedule",
+    dependencies=[
+        Depends(verify_api_key),
+        Depends(rate_limiter),
+    ],
+)
+async def schedule_swarm(swarm: SwarmSpec, x_api_key: str = Header(...)) -> Dict[str, Any]:
+    """
+    Schedule a swarm to run at a specific time.
+    """
+    if not swarm.schedule:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Schedule information is required"
+        )
+
+    try:
+        # Generate a unique job ID
+        job_id = f"swarm_{swarm.name}_{int(time())}"
+        
+        # Create and start the scheduled job
+        job = ScheduledJob(
+            job_id=job_id,
+            scheduled_time=swarm.schedule.scheduled_time,
+            swarm=swarm,
+            api_key=x_api_key
+        )
+        job.start()
+        
+        # Store the job information
+        scheduled_jobs[job_id] = {
+            "job": job,
+            "swarm_name": swarm.name,
+            "scheduled_time": swarm.schedule.scheduled_time,
+            "timezone": swarm.schedule.timezone
+        }
+
+        # Log the scheduling
+        await log_api_request(x_api_key, {
+            "action": "schedule_swarm",
+            "swarm_name": swarm.name,
+            "scheduled_time": swarm.schedule.scheduled_time.isoformat(),
+            "job_id": job_id
+        })
+
+        return {
+            "status": "success",
+            "message": "Swarm scheduled successfully",
+            "job_id": job_id,
+            "scheduled_time": swarm.schedule.scheduled_time,
+            "timezone": swarm.schedule.timezone
+        }
+
+    except Exception as e:
+        logger.error(f"Error scheduling swarm: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to schedule swarm: {str(e)}"
+        )
+
+@app.get(
+    "/v1/swarm/schedule",
+    dependencies=[
+        Depends(verify_api_key),
+        Depends(rate_limiter),
+    ],
+)
+async def get_scheduled_jobs(x_api_key: str = Header(...)) -> Dict[str, Any]:
+    """
+    Get all scheduled swarm jobs.
+    """
+    try:
+        jobs_list = []
+        current_time = datetime.now(pytz.UTC)
+        
+        # Clean up completed jobs
+        completed_jobs = [
+            job_id for job_id, job_info in scheduled_jobs.items()
+            if current_time >= job_info["scheduled_time"]
+        ]
+        for job_id in completed_jobs:
+            scheduled_jobs.pop(job_id, None)
+        
+        # Get active jobs
+        for job_id, job_info in scheduled_jobs.items():
+            jobs_list.append({
+                "job_id": job_id,
+                "swarm_name": job_info["swarm_name"],
+                "scheduled_time": job_info["scheduled_time"].isoformat(),
+                "timezone": job_info["timezone"]
+            })
+
+        return {
+            "status": "success",
+            "scheduled_jobs": jobs_list
+        }
+
+    except Exception as e:
+        logger.error(f"Error retrieving scheduled jobs: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to retrieve scheduled jobs: {str(e)}"
+        )
+
+@app.delete(
+    "/v1/swarm/schedule/{job_id}",
+    dependencies=[
+        Depends(verify_api_key),
+        Depends(rate_limiter),
+    ],
+)
+async def cancel_scheduled_job(
+    job_id: str,
+    x_api_key: str = Header(...)
+) -> Dict[str, Any]:
+    """
+    Cancel a scheduled swarm job.
+    """
+    try:
+        if job_id not in scheduled_jobs:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Scheduled job not found"
+            )
+
+        # Cancel and remove the job
+        job_info = scheduled_jobs[job_id]
+        job_info["job"].cancelled = True
+        scheduled_jobs.pop(job_id)
+        
+        await log_api_request(x_api_key, {
+            "action": "cancel_scheduled_job",
+            "job_id": job_id
+        })
+
+        return {
+            "status": "success",
+            "message": "Scheduled job cancelled successfully",
+            "job_id": job_id
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error cancelling scheduled job: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to cancel scheduled job: {str(e)}"
+        )
 
 
 # --- Main Entrypoint ---
@@ -688,4 +889,4 @@ async def get_logs(x_api_key: str = Header(...)) -> Dict[str, Any]:
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run(app, host="0.0.0.0", port=8080)
+    uvicorn.run(app, host="0.0.0.0", port=8080, workers=os.cpu_count())
