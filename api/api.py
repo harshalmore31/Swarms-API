@@ -1,15 +1,4 @@
- """
-- Add memory instances endpoints for each agent
-- create pricing formula for the memory usage
-- Upload docs to the swarms memory db and then the agents will retrieve it [time x tokens retrieval? how can we host it on the cloud?]
-- Add rate limiting 
-- Add prompting caching and more logic like this
-- make functions multi-threaded where possible to accelerate the script
-- 
 
-"""
-
-import asyncio
 import os
 from collections import defaultdict
 from datetime import datetime
@@ -35,6 +24,7 @@ from loguru import logger
 from pydantic import BaseModel, Field
 from swarms import Agent, SwarmRouter, SwarmType
 from swarms.utils.litellm_tokenizer import count_tokens
+import asyncio
 
 load_dotenv()
 
