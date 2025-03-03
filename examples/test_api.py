@@ -18,6 +18,7 @@ API_KEY = os.getenv("SWARMS_API_KEY")
 # Headers used for all requests
 headers = {"x-api-key": API_KEY, "Content-Type": "application/json"}
 
+
 def check_server_running():
     """Check if the API server is running"""
     try:
@@ -27,7 +28,9 @@ def check_server_running():
         print("\n❌ ERROR: Could not connect to the API server!")
         print("\nPlease start the server first with:")
         print("\nuvicorn api.api:app --host 0.0.0.0 --port 8080 --reload")
-        print("\nMake sure you're in the project root directory when running this command.")
+        print(
+            "\nMake sure you're in the project root directory when running this command."
+        )
         return False
 
 
@@ -151,7 +154,7 @@ def test_schedule_swarm():
     """Test scheduling a swarm for future execution"""
     # Set execution time to 5 minutes from now
     execution_time = (datetime.now(pytz.UTC) + timedelta(minutes=5)).isoformat()
-    
+
     payload = {
         "swarm": {  # Wrap swarm configuration in a "swarm" key
             "name": "Scheduled Test Swarm",
@@ -168,9 +171,9 @@ def test_schedule_swarm():
             ],
             "max_loops": 1,
             "swarm_type": "ConcurrentWorkflow",
-            "task": "Write a short summary about scheduling."
+            "task": "Write a short summary about scheduling.",
         },
-        "execution_time": execution_time
+        "execution_time": execution_time,
     }
 
     print("\n=== Schedule Swarm Test ===")
@@ -182,42 +185,43 @@ def test_schedule_swarm():
     print(f"Status Code: {response.status_code}")
     return json.dumps(response.json(), indent=4)
 
+
 def test_list_scheduled_swarms():
     """Test retrieving all scheduled swarms"""
     print("\n=== List Scheduled Swarms Test ===")
     response = requests.get(
-        f"{BASE_URL}/v1/swarms/scheduled",  # Updated endpoint
-        headers=headers
+        f"{BASE_URL}/v1/swarms/scheduled", headers=headers  # Updated endpoint
     )
     print(f"Status Code: {response.status_code}")
     return json.dumps(response.json(), indent=4)
+
 
 def test_cancel_scheduled_swarm(schedule_id: str):
     """Test canceling a scheduled swarm"""
     print("\n=== Cancel Scheduled Swarm Test ===")
     response = requests.delete(
         f"{BASE_URL}/v1/swarms/schedule/{schedule_id}",  # Updated endpoint
-        headers=headers
+        headers=headers,
     )
     print(f"Status Code: {response.status_code}")
     return json.dumps(response.json(), indent=4)
+
 
 def test_get_swarm_status(swarm_id: str):
     """Test getting the status of a specific swarm"""
     print("\n=== Get Swarm Status Test ===")
     response = requests.get(
-        f"{BASE_URL}/v1/swarms/{swarm_id}/status",  # Updated endpoint
-        headers=headers
+        f"{BASE_URL}/v1/swarms/{swarm_id}/status", headers=headers  # Updated endpoint
     )
     print(f"Status Code: {response.status_code}")
     return json.dumps(response.json(), indent=4)
+
 
 def test_list_active_swarms():
     """Test retrieving all active swarms"""
     print("\n=== List Active Swarms Test ===")
     response = requests.get(
-        f"{BASE_URL}/v1/swarms/active",  # Updated endpoint
-        headers=headers
+        f"{BASE_URL}/v1/swarms/active", headers=headers  # Updated endpoint
     )
     print(f"Status Code: {response.status_code}")
     return json.dumps(response.json(), indent=4)
@@ -230,5 +234,5 @@ if __name__ == "__main__":
     sleep(2)
     print(test_schedule_swarm())
     sleep(2)
-    
+
     # print(test_get_swarm_status)

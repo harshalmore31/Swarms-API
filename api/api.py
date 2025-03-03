@@ -69,8 +69,6 @@ def rate_limiter(request: Request):
         )
 
 
-
-
 class AgentSpec(BaseModel):
     agent_name: Optional[str] = Field(None, description="Agent Name", max_length=100)
     description: Optional[str] = Field(None, description="Description", max_length=500)
@@ -97,7 +95,9 @@ class AgentSpec(BaseModel):
 
 class ScheduleSpec(BaseModel):
     scheduled_time: datetime = Field(..., description="When to execute the swarm (UTC)")
-    timezone: Optional[str] = Field("UTC", description="Timezone for the scheduled time")
+    timezone: Optional[str] = Field(
+        "UTC", description="Timezone for the scheduled time"
+    )
 
 
 class SwarmSpec(BaseModel):
@@ -112,11 +112,12 @@ class SwarmSpec(BaseModel):
     return_history: Optional[bool] = Field(True, description="Return History")
     rules: Optional[str] = Field(None, description="Rules")
     schedule: Optional[ScheduleSpec] = Field(None, description="Scheduling information")
-    
 
 
 class ScheduledJob(Thread):
-    def __init__(self, job_id: str, scheduled_time: datetime, swarm: SwarmSpec, api_key: str):
+    def __init__(
+        self, job_id: str, scheduled_time: datetime, swarm: SwarmSpec, api_key: str
+    ):
         super().__init__()
         self.job_id = job_id
         self.scheduled_time = scheduled_time
@@ -133,7 +134,9 @@ class ScheduledJob(Thread):
                     # Execute the swarm
                     asyncio.run(run_swarm_completion(self.swarm, self.api_key))
                 except Exception as e:
-                    logger.error(f"Error executing scheduled swarm {self.job_id}: {str(e)}")
+                    logger.error(
+                        f"Error executing scheduled swarm {self.job_id}: {str(e)}"
+                    )
                 finally:
                     # Remove the job from scheduled_jobs after execution
                     scheduled_jobs.pop(self.job_id, None)
@@ -528,7 +531,7 @@ def calculate_swarm_cost(
     COST_PER_1M_OUTPUT_TOKENS = 6.00  # Cost per 1M output tokens
 
     # Get current time in California timezone
-    california_tz = pytz.timezone('America/Los_Angeles')
+    california_tz = pytz.timezone("America/Los_Angeles")
     current_time = datetime.now(california_tz)
     is_night_time = current_time.hour >= 20 or current_time.hour < 6  # 8 PM to 6 AM
 
@@ -753,59 +756,65 @@ async def get_logs(x_api_key: str = Header(...)) -> Dict[str, Any]:
         Depends(rate_limiter),
     ],
 )
-async def schedule_swarm(swarm: SwarmSpec, x_api_key: str = Header(...)) -> Dict[str, Any]:
+async def schedule_swarm(
+    swarm: SwarmSpec, x_api_key: str = Header(...)
+) -> Dict[str, Any]:
     """
     Schedule a swarm to run at a specific time.
     """
     if not swarm.schedule:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Schedule information is required"
+            detail="Schedule information is required",
         )
 
     try:
         # Generate a unique job ID
         job_id = f"swarm_{swarm.name}_{int(time())}"
-        
+
         # Create and start the scheduled job
         job = ScheduledJob(
             job_id=job_id,
             scheduled_time=swarm.schedule.scheduled_time,
             swarm=swarm,
-            api_key=x_api_key
+            api_key=x_api_key,
         )
         job.start()
-        
+
         # Store the job information
         scheduled_jobs[job_id] = {
             "job": job,
             "swarm_name": swarm.name,
             "scheduled_time": swarm.schedule.scheduled_time,
-            "timezone": swarm.schedule.timezone
+            "timezone": swarm.schedule.timezone,
         }
 
         # Log the scheduling
-        await log_api_request(x_api_key, {
-            "action": "schedule_swarm",
-            "swarm_name": swarm.name,
-            "scheduled_time": swarm.schedule.scheduled_time.isoformat(),
-            "job_id": job_id
-        })
+        await log_api_request(
+            x_api_key,
+            {
+                "action": "schedule_swarm",
+                "swarm_name": swarm.name,
+                "scheduled_time": swarm.schedule.scheduled_time.isoformat(),
+                "job_id": job_id,
+            },
+        )
 
         return {
             "status": "success",
             "message": "Swarm scheduled successfully",
             "job_id": job_id,
             "scheduled_time": swarm.schedule.scheduled_time,
-            "timezone": swarm.schedule.timezone
+            "timezone": swarm.schedule.timezone,
         }
 
     except Exception as e:
         logger.error(f"Error scheduling swarm: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to schedule swarm: {str(e)}"
+            detail=f"Failed to schedule swarm: {str(e)}",
         )
+
 
 @app.get(
     "/v1/swarm/schedule",
@@ -821,35 +830,36 @@ async def get_scheduled_jobs(x_api_key: str = Header(...)) -> Dict[str, Any]:
     try:
         jobs_list = []
         current_time = datetime.now(pytz.UTC)
-        
+
         # Clean up completed jobs
         completed_jobs = [
-            job_id for job_id, job_info in scheduled_jobs.items()
+            job_id
+            for job_id, job_info in scheduled_jobs.items()
             if current_time >= job_info["scheduled_time"]
         ]
         for job_id in completed_jobs:
             scheduled_jobs.pop(job_id, None)
-        
+
         # Get active jobs
         for job_id, job_info in scheduled_jobs.items():
-            jobs_list.append({
-                "job_id": job_id,
-                "swarm_name": job_info["swarm_name"],
-                "scheduled_time": job_info["scheduled_time"].isoformat(),
-                "timezone": job_info["timezone"]
-            })
+            jobs_list.append(
+                {
+                    "job_id": job_id,
+                    "swarm_name": job_info["swarm_name"],
+                    "scheduled_time": job_info["scheduled_time"].isoformat(),
+                    "timezone": job_info["timezone"],
+                }
+            )
 
-        return {
-            "status": "success",
-            "scheduled_jobs": jobs_list
-        }
+        return {"status": "success", "scheduled_jobs": jobs_list}
 
     except Exception as e:
         logger.error(f"Error retrieving scheduled jobs: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to retrieve scheduled jobs: {str(e)}"
+            detail=f"Failed to retrieve scheduled jobs: {str(e)}",
         )
+
 
 @app.delete(
     "/v1/swarm/schedule/{job_id}",
@@ -859,8 +869,7 @@ async def get_scheduled_jobs(x_api_key: str = Header(...)) -> Dict[str, Any]:
     ],
 )
 async def cancel_scheduled_job(
-    job_id: str,
-    x_api_key: str = Header(...)
+    job_id: str, x_api_key: str = Header(...)
 ) -> Dict[str, Any]:
     """
     Cancel a scheduled swarm job.
@@ -868,24 +877,22 @@ async def cancel_scheduled_job(
     try:
         if job_id not in scheduled_jobs:
             raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Scheduled job not found"
+                status_code=status.HTTP_404_NOT_FOUND, detail="Scheduled job not found"
             )
 
         # Cancel and remove the job
         job_info = scheduled_jobs[job_id]
         job_info["job"].cancelled = True
         scheduled_jobs.pop(job_id)
-        
-        await log_api_request(x_api_key, {
-            "action": "cancel_scheduled_job",
-            "job_id": job_id
-        })
+
+        await log_api_request(
+            x_api_key, {"action": "cancel_scheduled_job", "job_id": job_id}
+        )
 
         return {
             "status": "success",
             "message": "Scheduled job cancelled successfully",
-            "job_id": job_id
+            "job_id": job_id,
         }
 
     except HTTPException:
@@ -894,7 +901,7 @@ async def cancel_scheduled_job(
         logger.error(f"Error cancelling scheduled job: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to cancel scheduled job: {str(e)}"
+            detail=f"Failed to cancel scheduled job: {str(e)}",
         )
 
 
