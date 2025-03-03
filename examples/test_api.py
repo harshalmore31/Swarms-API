@@ -1,71 +1,38 @@
-import requests
 import json
+import os
+from datetime import datetime, timedelta
 from time import sleep
-from typing import Dict, Any, Optional
+
+import pytz
+import requests
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # Base URL for local testing
 BASE_URL = "http://localhost:8080"
 
-# Test API key - replace with your valid key from .env
-API_KEY = ""
+# Test API key - you'll need to replace this with a valid key
+API_KEY = os.getenv("SWARMS_API_KEY")
 
 # Headers used for all requests
 headers = {"x-api-key": API_KEY, "Content-Type": "application/json"}
 
-
-def make_request(
-    method: str, endpoint: str, json_data: Optional[Dict] = None
-) -> Dict[str, Any]:
-    """
-    Make an HTTP request and handle common errors
-    """
-    url = f"{BASE_URL}{endpoint}"
+def check_server_running():
+    """Check if the API server is running"""
     try:
-        if method.lower() == "get":
-            response = requests.get(url, headers=headers)
-        else:
-            response = requests.post(url, headers=headers, json=json_data)
-
-        # Try to get JSON response
-        try:
-            result = response.json()
-        except requests.exceptions.JSONDecodeError:
-            result = {"error": f"Invalid JSON response: {response.text}"}
-
-        return {
-            "status_code": response.status_code,
-            "success": 200 <= response.status_code < 300,
-            "data": result,
-        }
-
+        requests.get(f"{BASE_URL}/health", timeout=5)
+        return True
     except requests.exceptions.ConnectionError:
-        return {
-            "status_code": 503,
-            "success": False,
-            "data": {"error": f"Could not connect to {url}. Is the server running?"},
-        }
-    except Exception as e:
-        return {
-            "status_code": 500,
-            "success": False,
-            "data": {"error": str(e)},
-        }
-
-
-def test_health():
-    """Test the health check endpoint"""
-    print("\n=== Health Check Test ===")
-    result = make_request("GET", "/health")
-    print(f"Status Code: {result['status_code']}")
-    print(f"Response: {result['data']}")
-    return result["success"]
+        print("\n❌ ERROR: Could not connect to the API server!")
+        print("\nPlease start the server first with:")
+        print("\nuvicorn api.api:app --host 0.0.0.0 --port 8080 --reload")
+        print("\nMake sure you're in the project root directory when running this command.")
+        return False
 
 
 def test_run_swarm():
-    """Test running a swarm"""
-    print("\n=== Run Swarm Test ===")
-
-    # Test payload
+    """Test running a swarm endpoint"""
     payload = {
         "name": "Test Swarm",
         "description": "A test swarm",
@@ -74,111 +41,194 @@ def test_run_swarm():
                 "agent_name": "Research Agent",
                 "description": "Conducts research",
                 "system_prompt": "You are a research assistant.",
-                "model_name": "gpt-4",
-                "role": "researcher",
+                "model_name": "gpt-4o",
+                "role": "worker",
                 "max_loops": 1,
-                "temperature": 0.7,
             },
             {
                 "agent_name": "Writing Agent",
                 "description": "Writes content",
                 "system_prompt": "You are a content writer.",
-                "model_name": "gpt-4",
-                "role": "writer",
+                "model_name": "gpt-4o",
+                "role": "worker",
                 "max_loops": 1,
-                "temperature": 0.7,
             },
         ],
         "max_loops": 1,
-        "swarm_type": "sequential",
-        "flow": "sequential",
+        "swarm_type": "ConcurrentWorkflow",
         "task": "Write a short blog post about AI agents.",
     }
 
-    result = make_request("POST", "/v1/swarm/completions", payload)
-    print(f"Status Code: {result['status_code']}")
-    print(f"Response: {json.dumps(result['data'], indent=2)}")
-    return result["success"]
+    print("\n=== Run Swarm Test ===")
+    response = requests.post(
+        f"{BASE_URL}/v1/swarm/completions",
+        headers=headers,
+        json=payload,
+    )
+    # print(f"Status Code: {response.status_code}")
+    # print(f"Response: {response.json()}")
+
+    output = response.json()
+
+    return json.dumps(output, indent=4)
 
 
-def test_batch_completions():
-    """Test batch completions endpoint"""
-    print("\n=== Batch Completions Test ===")
-
-    # Test payload with multiple swarms
+def test_batch_swarm():
+    """Test the batch swarm completions endpoint"""
     payload = [
         {
-            "name": "Swarm 1",
-            "description": "First test swarm",
+            "name": "Batch Swarm 1",
+            "description": "First swarm in the batch",
             "agents": [
                 {
-                    "agent_name": "Agent 1",
-                    "description": "Test agent",
-                    "system_prompt": "You are a helpful assistant.",
-                    "model_name": "gpt-4",
-                    "role": "assistant",
+                    "agent_name": "Research Agent",
+                    "description": "Conducts research",
+                    "system_prompt": "You are a research assistant.",
+                    "model_name": "gpt-4o",
+                    "role": "worker",
                     "max_loops": 1,
-                }
+                },
+                {
+                    "agent_name": "Analysis Agent",
+                    "description": "Analyzes data",
+                    "system_prompt": "You are a data analyst.",
+                    "model_name": "gpt-4o",
+                    "role": "worker",
+                    "max_loops": 1,
+                },
             ],
             "max_loops": 1,
-            "task": "Say hello",
+            "swarm_type": "SequentialWorkflow",
+            "task": "Research AI advancements.",
         },
         {
-            "name": "Swarm 2",
-            "description": "Second test swarm",
+            "name": "Batch Swarm 2",
+            "description": "Second swarm in the batch",
             "agents": [
                 {
-                    "agent_name": "Agent 2",
-                    "description": "Test agent",
-                    "system_prompt": "You are a helpful assistant.",
-                    "model_name": "gpt-4",
-                    "role": "assistant",
+                    "agent_name": "Writing Agent",
+                    "description": "Writes content",
+                    "system_prompt": "You are a content writer.",
+                    "model_name": "gpt-4o",
+                    "role": "worker",
                     "max_loops": 1,
-                }
+                },
+                {
+                    "agent_name": "Editing Agent",
+                    "description": "Edits content",
+                    "system_prompt": "You are an editor.",
+                    "model_name": "gpt-4o",
+                    "role": "worker",
+                    "max_loops": 1,
+                },
             ],
             "max_loops": 1,
-            "task": "Say goodbye",
+            "swarm_type": "SequentialWorkflow",
+            "task": "Write a summary of AI research.",
         },
     ]
 
-    result = make_request("POST", "/v1/swarm/batch/completions", payload)
-    print(f"Status Code: {result['status_code']}")
-    print(f"Response: {json.dumps(result['data'], indent=2)}")
-    return result["success"]
+    print("\n=== Batch Swarm Test ===")
+    response = requests.post(
+        f"{BASE_URL}/v1/swarm/batch/completions",
+        headers=headers,
+        json=payload,
+    )
+    print(f"Status Code: {response.status_code}")
+    # print(f"Response: {response.json()}")
+
+    return json.dumps(response.json(), indent=4)
 
 
-def run_all_tests():
-    """Run all tests with some delay between them"""
-    results = {"health": False, "swarm": False, "batch": False}
+def print_logs():
+    """Print the logs for the swarm"""
+    response = requests.get(f"{BASE_URL}/v1/swarm/logs", headers=headers)
+    print(response.status_code)
+    return json.dumps(response.json(), indent=4)
 
-    try:
-        print("Starting API tests...")
 
-        # Test health endpoint
-        results["health"] = test_health()
-        if not results["health"]:
-            print("\nERROR: Health check failed. Stopping tests.")
-            return results
-        sleep(1)
+def test_schedule_swarm():
+    """Test scheduling a swarm for future execution"""
+    # Set execution time to 5 minutes from now
+    execution_time = (datetime.now(pytz.UTC) + timedelta(minutes=5)).isoformat()
+    
+    payload = {
+        "swarm": {  # Wrap swarm configuration in a "swarm" key
+            "name": "Scheduled Test Swarm",
+            "description": "A scheduled test swarm",
+            "agents": [
+                {
+                    "agent_name": "Research Agent",
+                    "description": "Conducts research",
+                    "system_prompt": "You are a research assistant.",
+                    "model_name": "gpt-4",
+                    "role": "worker",
+                    "max_loops": 1,
+                }
+            ],
+            "max_loops": 1,
+            "swarm_type": "ConcurrentWorkflow",
+            "task": "Write a short summary about scheduling."
+        },
+        "execution_time": execution_time
+    }
 
-        # Test single swarm
-        results["swarm"] = test_run_swarm()
-        sleep(1)
+    print("\n=== Schedule Swarm Test ===")
+    response = requests.post(
+        f"{BASE_URL}/v1/swarms/schedule",  # Updated endpoint
+        headers=headers,
+        json=payload,
+    )
+    print(f"Status Code: {response.status_code}")
+    return json.dumps(response.json(), indent=4)
 
-        # Test batch completions
-        results["batch"] = test_batch_completions()
+def test_list_scheduled_swarms():
+    """Test retrieving all scheduled swarms"""
+    print("\n=== List Scheduled Swarms Test ===")
+    response = requests.get(
+        f"{BASE_URL}/v1/swarms/scheduled",  # Updated endpoint
+        headers=headers
+    )
+    print(f"Status Code: {response.status_code}")
+    return json.dumps(response.json(), indent=4)
 
-    except Exception as e:
-        print(f"\nERROR: An unexpected error occurred: {str(e)}")
+def test_cancel_scheduled_swarm(schedule_id: str):
+    """Test canceling a scheduled swarm"""
+    print("\n=== Cancel Scheduled Swarm Test ===")
+    response = requests.delete(
+        f"{BASE_URL}/v1/swarms/schedule/{schedule_id}",  # Updated endpoint
+        headers=headers
+    )
+    print(f"Status Code: {response.status_code}")
+    return json.dumps(response.json(), indent=4)
 
-    return results
+def test_get_swarm_status(swarm_id: str):
+    """Test getting the status of a specific swarm"""
+    print("\n=== Get Swarm Status Test ===")
+    response = requests.get(
+        f"{BASE_URL}/v1/swarms/{swarm_id}/status",  # Updated endpoint
+        headers=headers
+    )
+    print(f"Status Code: {response.status_code}")
+    return json.dumps(response.json(), indent=4)
+
+def test_list_active_swarms():
+    """Test retrieving all active swarms"""
+    print("\n=== List Active Swarms Test ===")
+    response = requests.get(
+        f"{BASE_URL}/v1/swarms/active",  # Updated endpoint
+        headers=headers
+    )
+    print(f"Status Code: {response.status_code}")
+    return json.dumps(response.json(), indent=4)
 
 
 if __name__ == "__main__":
-    results = run_all_tests()
-
-    print("\nTest Results Summary:")
-    print("=====================")
-    for test_name, passed in results.items():
-        status = "✅ PASSED" if passed else "❌ FAILED"
-        print(f"{test_name.title():10} {status}")
+    print(test_run_swarm())
+    sleep(2)
+    print(test_batch_swarm())
+    sleep(2)
+    print(test_schedule_swarm())
+    sleep(2)
+    
+    # print(test_get_swarm_status)
