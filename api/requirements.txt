@@ -9,3 +9,4 @@ supabase
 loguru
 torch
 transformers
+pytz
