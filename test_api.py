@@ -1,7 +1,9 @@
 import json
 import os
+from datetime import datetime, timedelta
 from time import sleep
 
+import pytz
 import requests
 from dotenv import load_dotenv
 
@@ -145,22 +147,88 @@ def print_logs():
     return json.dumps(response.json(), indent=4)
 
 
-def run_all_tests():
-    """Run all tests with some delay between them"""
-    # Test basic health endpoint
-    check_server_running()
-    sleep(1)
+def test_schedule_swarm():
+    """Test scheduling a swarm for future execution"""
+    # Set execution time to 5 minutes from now
+    execution_time = (datetime.now(pytz.UTC) + timedelta(minutes=5)).isoformat()
+    
+    payload = {
+        "swarm": {  # Wrap swarm configuration in a "swarm" key
+            "name": "Scheduled Test Swarm",
+            "description": "A scheduled test swarm",
+            "agents": [
+                {
+                    "agent_name": "Research Agent",
+                    "description": "Conducts research",
+                    "system_prompt": "You are a research assistant.",
+                    "model_name": "gpt-4",
+                    "role": "worker",
+                    "max_loops": 1,
+                }
+            ],
+            "max_loops": 1,
+            "swarm_type": "ConcurrentWorkflow",
+            "task": "Write a short summary about scheduling."
+        },
+        "execution_time": execution_time
+    }
 
-    # # Test running a swarm
-    # print(test_run_swarm())
+    print("\n=== Schedule Swarm Test ===")
+    response = requests.post(
+        f"{BASE_URL}/v1/swarms/schedule",  # Updated endpoint
+        headers=headers,
+        json=payload,
+    )
+    print(f"Status Code: {response.status_code}")
+    return json.dumps(response.json(), indent=4)
 
-    # print(test_batch_swarm())
+def test_list_scheduled_swarms():
+    """Test retrieving all scheduled swarms"""
+    print("\n=== List Scheduled Swarms Test ===")
+    response = requests.get(
+        f"{BASE_URL}/v1/swarms/scheduled",  # Updated endpoint
+        headers=headers
+    )
+    print(f"Status Code: {response.status_code}")
+    return json.dumps(response.json(), indent=4)
 
-    # Print the logs
-    print(print_logs())
+def test_cancel_scheduled_swarm(schedule_id: str):
+    """Test canceling a scheduled swarm"""
+    print("\n=== Cancel Scheduled Swarm Test ===")
+    response = requests.delete(
+        f"{BASE_URL}/v1/swarms/schedule/{schedule_id}",  # Updated endpoint
+        headers=headers
+    )
+    print(f"Status Code: {response.status_code}")
+    return json.dumps(response.json(), indent=4)
+
+def test_get_swarm_status(swarm_id: str):
+    """Test getting the status of a specific swarm"""
+    print("\n=== Get Swarm Status Test ===")
+    response = requests.get(
+        f"{BASE_URL}/v1/swarms/{swarm_id}/status",  # Updated endpoint
+        headers=headers
+    )
+    print(f"Status Code: {response.status_code}")
+    return json.dumps(response.json(), indent=4)
+
+def test_list_active_swarms():
+    """Test retrieving all active swarms"""
+    print("\n=== List Active Swarms Test ===")
+    response = requests.get(
+        f"{BASE_URL}/v1/swarms/active",  # Updated endpoint
+        headers=headers
+    )
+    print(f"Status Code: {response.status_code}")
+    return json.dumps(response.json(), indent=4)
 
 
 if __name__ == "__main__":
-    print("Starting API tests...")
-    run_all_tests()
-    print("\nTests completed!")
+    print(test_run_swarm())
+    sleep(2)
+    print(test_batch_swarm())
+    sleep(2)
+    print(test_schedule_swarm())
+    sleep(2)
+    
+    # print(test_get_swarm_status)

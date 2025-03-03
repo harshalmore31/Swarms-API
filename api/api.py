@@ -9,15 +9,17 @@
 
 """
 
-import os
 import asyncio
+import os
 from collections import defaultdict
+from datetime import datetime
 from decimal import Decimal
 from functools import lru_cache
-from time import time, sleep
+from threading import Thread
+from time import sleep, time
 from typing import Any, Dict, List, Optional, Union
-from datetime import datetime
 
+import pytz
 import supabase
 from dotenv import load_dotenv
 from fastapi import (
@@ -33,8 +35,6 @@ from loguru import logger
 from pydantic import BaseModel, Field
 from swarms import Agent, SwarmRouter, SwarmType
 from swarms.utils.litellm_tokenizer import count_tokens
-from threading import Thread
-import pytz
 
 load_dotenv()
 
@@ -67,6 +67,8 @@ def rate_limiter(request: Request):
         raise HTTPException(
             status_code=429, detail="Rate limit exceeded. Please try again later."
         )
+
+
 
 
 class AgentSpec(BaseModel):
@@ -111,6 +113,32 @@ class SwarmSpec(BaseModel):
     rules: Optional[str] = Field(None, description="Rules")
     schedule: Optional[ScheduleSpec] = Field(None, description="Scheduling information")
     
+
+
+class ScheduledJob(Thread):
+    def __init__(self, job_id: str, scheduled_time: datetime, swarm: SwarmSpec, api_key: str):
+        super().__init__()
+        self.job_id = job_id
+        self.scheduled_time = scheduled_time
+        self.swarm = swarm
+        self.api_key = api_key
+        self.daemon = True  # Allow the thread to be terminated when main program exits
+        self.cancelled = False
+
+    def run(self):
+        while not self.cancelled:
+            now = datetime.now(pytz.UTC)
+            if now >= self.scheduled_time:
+                try:
+                    # Execute the swarm
+                    asyncio.run(run_swarm_completion(self.swarm, self.api_key))
+                except Exception as e:
+                    logger.error(f"Error executing scheduled swarm {self.job_id}: {str(e)}")
+                finally:
+                    # Remove the job from scheduled_jobs after execution
+                    scheduled_jobs.pop(self.job_id, None)
+                break
+            sleep(1)  # Check every second
 
 
 def get_supabase_client():
@@ -496,8 +524,13 @@ def calculate_swarm_cost(
     """
     # Base costs per unit (these could be moved to environment variables)
     COST_PER_AGENT = 0.01  # Base cost per agent
-    COST_PER_1M_INPUT_TOKENS = 5.00  # Cost per 1M input tokens
-    COST_PER_1M_OUTPUT_TOKENS = 15.50  # Cost per 1M output tokens (2.5x input cost)
+    COST_PER_1M_INPUT_TOKENS = 2.00  # Cost per 1M input tokens
+    COST_PER_1M_OUTPUT_TOKENS = 6.00  # Cost per 1M output tokens
+
+    # Get current time in California timezone
+    california_tz = pytz.timezone('America/Los_Angeles')
+    current_time = datetime.now(california_tz)
+    is_night_time = current_time.hour >= 20 or current_time.hour < 6  # 8 PM to 6 AM
 
     try:
         # Calculate input tokens for task
@@ -563,6 +596,11 @@ def calculate_swarm_cost(
         output_token_cost = (
             (total_output_tokens / 1_000_000) * COST_PER_1M_OUTPUT_TOKENS * len(agents)
         )
+
+        # Apply discount during California night time hours
+        if is_night_time:
+            input_token_cost *= 0.25  # 75% discount
+            output_token_cost *= 0.25  # 75% discount
 
         # Calculate total cost
         total_cost = agent_cost + input_token_cost + output_token_cost
@@ -707,30 +745,6 @@ async def get_logs(x_api_key: str = Header(...)) -> Dict[str, Any]:
 #     """
 #     return {"status": "success", "cost": calculate_swarm_cost(swarm)})
 
-class ScheduledJob(Thread):
-    def __init__(self, job_id: str, scheduled_time: datetime, swarm: SwarmSpec, api_key: str):
-        super().__init__()
-        self.job_id = job_id
-        self.scheduled_time = scheduled_time
-        self.swarm = swarm
-        self.api_key = api_key
-        self.daemon = True  # Allow the thread to be terminated when main program exits
-        self.cancelled = False
-
-    def run(self):
-        while not self.cancelled:
-            now = datetime.now(pytz.UTC)
-            if now >= self.scheduled_time:
-                try:
-                    # Execute the swarm
-                    asyncio.run(run_swarm_completion(self.swarm, self.api_key))
-                except Exception as e:
-                    logger.error(f"Error executing scheduled swarm {self.job_id}: {str(e)}")
-                finally:
-                    # Remove the job from scheduled_jobs after execution
-                    scheduled_jobs.pop(self.job_id, None)
-                break
-            sleep(1)  # Check every second
 
 @app.post(
     "/v1/swarm/schedule",
