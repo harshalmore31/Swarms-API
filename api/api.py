@@ -246,6 +246,11 @@ def create_swarm(swarm_spec: SwarmSpec) -> SwarmRouter:
         agents = []
         for agent_spec in swarm_spec.agents:
             try:
+                # Handle both dict and AgentSpec objects
+                if isinstance(agent_spec, dict):
+                    # Convert dict to AgentSpec
+                    agent_spec = AgentSpec(**agent_spec)
+
                 # Validate agent_spec fields
                 if not agent_spec.agent_name:
                     raise ValueError("Agent name is required.")
@@ -272,15 +277,17 @@ def create_swarm(swarm_spec: SwarmSpec) -> SwarmRouter:
             except ValueError as ve:
                 logger.error(
                     "Validation error for agent {}: {}",
-                    agent_spec.agent_name,
+                    getattr(agent_spec, 'agent_name', 'unknown'),
                     str(ve),
                 )
+                raise
             except Exception as agent_error:
                 logger.error(
                     "Error creating agent {}: {}",
-                    agent_spec.agent_name,
+                    getattr(agent_spec, 'agent_name', 'unknown'),
                     str(agent_error),
                 )
+                raise
 
         if not agents:
             raise ValueError(
