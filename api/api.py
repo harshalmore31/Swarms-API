@@ -102,7 +102,7 @@ class ScheduleSpec(BaseModel):
 
 class SwarmSpec(BaseModel):
     name: Optional[str] = Field(None, description="Swarm Name", max_length=100)
-    description: Optional[str] = Field(None, description="Description", max_length=500)
+    description: Optional[str] = Field(None, description="Description")
     agents: Optional[Union[List[AgentSpec], Any]] = Field(None, description="Agents")
     max_loops: Optional[int] = Field(None, description="Max Loops")
     swarm_type: Optional[SwarmType] = Field(None, description="Swarm Type")
