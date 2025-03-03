@@ -19,8 +19,6 @@ RUN apt-get update && \
     apt-get purge -y --auto-remove gcc build-essential && \
     rm -rf /var/lib/apt/lists/*
 
-
-
 # Copy the API source code into the container
 COPY api/ .
 
