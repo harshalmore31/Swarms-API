@@ -167,9 +167,9 @@ docker run -p 8080:8080 \
 
 # Todo
 
-- [ ] Add tool usage to the swarm for every agent
-- [ ] Add more conversation history. Add output list of dictionaries from the self.conversation to capture the agent outputs in a cleaner way than just a string.
+- [ ] Add tool usage to the swarm for every agent --> Tool dictionary input for every agent -> agent outputs dictionary of that tool usage
+- [x] Add more conversation history. Add output list of dictionaries from the self.conversation to capture the agent outputs in a cleaner way than just a string.
 - [ ] Add rag for input docs like pdf, csvs, and more, add pricing of rag depending on the number of tokens in the rag
 - [ ] Add async streaming output 
-
-
+- [ ] Add autonomous agent builder if the user doesn't upload agents, we should make them autonomously through the agent builder
+- [ ] Integrate gunicorn to make the api faster
