@@ -24,7 +24,6 @@ from loguru import logger
 from pydantic import BaseModel, Field
 from swarms import Agent, SwarmRouter, SwarmType
 from swarms.utils.litellm_tokenizer import count_tokens
-from swarms.utils.any_to_str import any_to_str
 
 load_dotenv()
 
@@ -693,6 +692,7 @@ def calculate_swarm_cost(
     except Exception as e:
         logger.error(f"Error calculating swarm cost: {str(e)}")
         raise ValueError(f"Failed to calculate swarm cost: {str(e)}")
+
 
 # --- FastAPI Application Setup ---
 
