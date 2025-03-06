@@ -30,10 +30,6 @@ load_dotenv()
 # Define rate limit parameters
 RATE_LIMIT = 100  # Max requests
 TIME_WINDOW = 60  # Time window in seconds
-# Replace with your actual API key
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-WHISPER_API_URL = "https://api.openai.com/v1/audio/transcriptions"  # Change to /audio/translations if needed
-
 # In-memory store for tracking requests
 request_counts = defaultdict(lambda: {"count": 0, "start_time": time()})
 

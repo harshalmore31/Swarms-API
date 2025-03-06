@@ -16,6 +16,10 @@ Build, deploy, and orchestrate agents at scale with ease
 - **Real-time Monitoring**: Track swarm performance and execution metrics in real-time for better insights and adjustments.
 - **Batch Processing**: Execute multiple swarm tasks simultaneously for enhanced efficiency and throughput.
 - **Extensive Documentation**: Detailed guides and examples to help you get started quickly and effectively.
+- **Speech Processing**: Text-to-speech and speech-to-text capabilities for voice-enabled applications
+- **Document Analysis**: Built-in RAG (Retrieval Augmented Generation) support for processing PDFs, CSVs, and other documents
+- **Streaming Support**: Real-time streaming of swarm outputs for responsive applications
+- **Usage Tracking**: Monitor API usage and credit consumption
 
 Read the docs [here](https://docs.swarms.world/en/latest/swarms_cloud/swarms_api/)
 
@@ -24,11 +28,69 @@ Read the docs [here](https://docs.swarms.world/en/latest/swarms_cloud/swarms_api
 
 The Swarms API provides endpoints for running single and batch agent swarm operations.
 
-### API Endpoints
+### API Endpoints & Parameters
 
-- `GET /health` - Health check endpoint
-- `POST /v1/swarm/completions` - Run a single swarm completion
-- `POST /v1/swarm/batch/completions` - Run multiple swarm completions in batch
+#### Core Swarm Endpoints
+
+| Endpoint | Method | Description | Parameters |
+|----------|--------|-------------|------------|
+| `/v1/swarm/completions` | POST | Run a single swarm completion | See Swarm Parameters table below |
+| `/v1/swarm/batch/completions` | POST | Run multiple swarm completions | Array of swarm parameters |
+| `/v1/swarm/stream/completions` | POST | Stream swarm completion results | Same as completions + `stream: true` |
+| `/v1/swarm/stream/batch` | POST | Stream batch completion results | Array of swarm parameters + `stream: true` |
+| `/v1/swarm/logs` | GET | Retrieve swarm execution logs | `limit`, `offset`, `start_date`, `end_date` |
+
+#### Speech & Audio Endpoints
+
+| Endpoint | Method | Description | Parameters |
+|----------|--------|-------------|------------|
+| `/v1/speech/text-to-speech` | POST | Convert text to speech | `text`, `voice_id`, `output_format` |
+| `/v1/speech/speech-to-text` | POST | Convert speech to text | `audio_file`, `language`, `model` |
+| `/v1/speech/transcribe` | POST | Transcribe audio files | `audio_file`, `language`, `timestamps` |
+
+#### Document Processing Endpoints
+
+| Endpoint | Method | Description | Parameters |
+|----------|--------|-------------|------------|
+| `/v1/docs/process` | POST | Process documents | `file`, `type`, `chunk_size`, `overlap` |
+| `/v1/docs/query` | POST | Query processed docs | `query`, `doc_id`, `k_results` |
+| `/v1/docs/status` | GET | Check processing status | `doc_id` |
+
+#### Management Endpoints
+
+| Endpoint | Method | Description | Parameters |
+|----------|--------|-------------|------------|
+| `/v1/usage` | GET | Get API usage stats | `start_date`, `end_date` |
+| `/v1/credits` | GET | Check API credits | None |
+| `/v1/models` | GET | List available models | `type`, `provider` |
+
+### Swarm Parameters
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `name` | string | Yes | Name of the swarm |
+| `description` | string | No | Description of the swarm's purpose |
+| `agents` | array | Yes | Array of agent configurations |
+| `max_loops` | integer | No | Maximum iteration loops (default: 1) |
+| `swarm_type` | string | Yes | Type of workflow ("ConcurrentWorkflow", "SequentialWorkflow", "HybridWorkflow") |
+| `task` | string | Yes | The task to be performed |
+| `output_type` | string | No | Desired output format (default: "str") |
+| `return_history` | boolean | No | Include conversation history (default: false) |
+| `stream` | boolean | No | Enable streaming response (default: false) |
+
+### Agent Configuration Parameters
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `agent_name` | string | Yes | Name of the agent |
+| `description` | string | No | Agent's purpose description |
+| `system_prompt` | string | Yes | System prompt for the agent |
+| `model_name` | string | Yes | AI model to use |
+| `role` | string | Yes | Agent's role ("worker", "manager", etc.) |
+| `max_loops` | integer | No | Maximum loops for this agent |
+| `max_tokens` | integer | No | Maximum tokens for responses |
+| `temperature` | float | No | Response randomness (0-2) |
+| `tools` | array | No | List of tools available to the agent |
 
 ### Authentication
 
@@ -169,8 +231,8 @@ docker run -p 8080:8080 \
 
 - [ ] Add tool usage to the swarm for every agent --> Tool dictionary input for every agent -> agent outputs dictionary of that tool usage
 - [x] Add more conversation history. Add output list of dictionaries from the self.conversation to capture the agent outputs in a cleaner way than just a string.
-- [ ] Add rag for input docs like pdf, csvs, and more, add pricing of rag depending on the number of tokens in the rag
-- [ ] Add async streaming output 
+- [x] Add rag for input docs like pdf, csvs, and more, add pricing of rag depending on the number of tokens in the rag
+- [x] Add async streaming output 
 - [ ] Add autonomous agent builder if the user doesn't upload agents, we should make them autonomously through the agent builder
 - [ ] Integrate gunicorn to make the api faster
-- [ ] Add speech inputs and speech outputs as well and charge more credits for that
+- [x] Add speech inputs and speech outputs as well and charge more credits for that
