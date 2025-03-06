@@ -47,7 +47,7 @@ def run_single_swarm():
             },
         ],
         "max_loops": 1,
-        "swarm_type": "ConcurrentWorkflow",
+        "swarm_type": "SequentialWorkflow",
         "task": "What are the best etfs and index funds for ai and tech?",
         "output_type": "dict",
     }

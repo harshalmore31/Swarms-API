@@ -6,7 +6,7 @@ from decimal import Decimal
 from functools import lru_cache
 from threading import Thread
 from time import sleep, time
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Union
 
 import pytz
 import supabase
@@ -23,86 +23,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from loguru import logger
 from pydantic import BaseModel, Field
 from swarms import Agent, SwarmRouter, SwarmType
-from swarms.utils.any_to_str import any_to_str
-from swarms.utils.function_caller_model import OpenAIFunctionCaller
 from swarms.utils.litellm_tokenizer import count_tokens
-
-BOSS_SYSTEM_PROMPT = """
-# Swarm Intelligence Orchestrator
-
-You are the Chief Orchestrator of a sophisticated agent swarm. Your primary responsibility is to analyze tasks and create the optimal team of specialized agents to accomplish complex objectives efficiently.
-
-## Agent Creation Protocol
-
-1. **Task Analysis**:
-   - Thoroughly analyze the user's task to identify all required skills, knowledge domains, and subtasks
-   - Break down complex problems into discrete components that can be assigned to specialized agents
-   - Identify potential challenges and edge cases that might require specialized handling
-
-2. **Agent Design Principles**:
-   - Create highly specialized agents with clearly defined roles and responsibilities
-   - Design each agent with deep expertise in their specific domain
-   - Provide agents with comprehensive and extremely extensive system prompts that include:
-     * Precise definition of their role and scope of responsibility
-     * Detailed methodology for approaching problems in their domain
-     * Specific techniques, frameworks, and mental models to apply
-     * Guidelines for output format and quality standards
-     * Instructions for collaboration with other agents
-     * In-depth examples and scenarios to illustrate expected behavior and decision-making processes
-     * Extensive background information relevant to the tasks they will undertake
-
-3. **Cognitive Enhancement**:
-   - Equip agents with advanced reasoning frameworks:
-     * First principles thinking to break down complex problems
-     * Systems thinking to understand interconnections
-     * Lateral thinking for creative solutions
-     * Critical thinking to evaluate information quality
-   - Implement specialized thought patterns:
-     * Step-by-step reasoning for complex problems
-     * Hypothesis generation and testing
-     * Counterfactual reasoning to explore alternatives
-     * Analogical reasoning to apply solutions from similar domains
-
-4. **Swarm Architecture**:
-   - Design optimal agent interaction patterns based on task requirements
-   - Consider hierarchical, networked, or hybrid structures
-   - Establish clear communication protocols between agents
-   - Define escalation paths for handling edge cases
-
-5. **Agent Specialization Examples**:
-   - Research Agents: Literature review, data gathering, information synthesis
-   - Analysis Agents: Data processing, pattern recognition, insight generation
-   - Creative Agents: Idea generation, content creation, design thinking
-   - Planning Agents: Strategy development, resource allocation, timeline creation
-   - Implementation Agents: Code writing, document drafting, execution planning
-   - Quality Assurance Agents: Testing, validation, error detection
-   - Integration Agents: Combining outputs, ensuring consistency, resolving conflicts
-
-## Output Format
-
-For each agent, provide:
-
-1. **Agent Name**: Clear, descriptive title reflecting specialization
-2. **Description**: Concise overview of the agent's purpose and capabilities
-3. **System Prompt**: Comprehensive and extremely extensive instructions including:
-   - Role definition and responsibilities
-   - Specialized knowledge and methodologies
-   - Thinking frameworks and problem-solving approaches
-   - Output requirements and quality standards
-   - Collaboration guidelines with other agents
-   - Detailed examples and context to ensure clarity and effectiveness
-
-## Optimization Guidelines
-
-- Create only the agents necessary for the task - no more, no less
-- Ensure each agent has a distinct, non-overlapping area of responsibility
-- Design system prompts that maximize agent performance through clear guidance and specialized knowledge
-- Balance specialization with the need for effective collaboration
-- Prioritize agents that address the most critical aspects of the task
-
-Remember: Your goal is to create a swarm of agents that collectively possesses the intelligence, knowledge, and capabilities to deliver exceptional results for the user's task.
-"""
-
+from swarms.utils.any_to_str import any_to_str
 
 load_dotenv()
 
@@ -169,6 +91,9 @@ class AgentSpec(BaseModel):
     max_loops: Optional[int] = Field(
         description="The maximum number of times the agent is allowed to repeat its task, enabling iterative processing if necessary."
     )
+    # tools: Optional[List[Any]] = Field(
+    #     description="A list of tools that the agent can use to complete its task."
+    # )
 
 
 class Agents(BaseModel):
@@ -200,7 +125,7 @@ class SwarmSpec(BaseModel):
         None,
         description="A comprehensive description of the swarm's objectives, capabilities, and intended outcomes.",
     )
-    agents: Optional[Union[List[AgentSpec], Any]] = Field(
+    agents: Optional[List[AgentSpec]] = Field(
         None,
         description="A list of agents or specifications that define the agents participating in the swarm.",
     )
@@ -236,154 +161,6 @@ class SwarmSpec(BaseModel):
         None,
         description="Details regarding the scheduling of the swarm's execution, including timing and timezone information.",
     )
-
-
-class AgentsBuilder:
-    """A class that automatically builds and manages swarms of AI agents.
-
-    This class handles the creation, coordination and execution of multiple AI agents working
-    together as a swarm to accomplish complex tasks. It uses a boss agent to delegate work
-    and create new specialized agents as needed.
-
-    Args:
-        name (str): The name of the swarm
-        description (str): A description of the swarm's purpose
-        verbose (bool, optional): Whether to output detailed logs. Defaults to True.
-        max_loops (int, optional): Maximum number of execution loops. Defaults to 1.
-    """
-
-    def __init__(
-        self,
-        name: str = "swarm-creator-01",
-        description: str = "This is a swarm that creates swarms",
-        verbose: bool = True,
-        max_loops: int = 1,
-    ):
-        self.name = name
-        self.description = description
-        self.verbose = verbose
-        self.max_loops = max_loops
-        self.agents_pool = []
-
-        logger.info(f"Initialized AutoSwarmBuilder: {name} {description}")
-
-    def run(
-        self, task: str, image_url: str = None, *args, **kwargs
-    ) -> Tuple[List[Agent], int]:
-        """Run the swarm on a given task.
-
-        Args:
-            task (str): The task to be accomplished
-            image_url (str, optional): URL of an image input if needed. Defaults to None.
-            *args: Variable length argument list
-            **kwargs: Arbitrary keyword arguments
-
-        Returns:
-            The output from the swarm's execution
-        """
-        logger.info(f"Running swarm on task: {task}")
-        agents, tokens = self._create_agents(task, image_url, *args, **kwargs)
-
-        return agents, tokens
-
-    def _create_agents(self, task: str, *args, **kwargs):
-        """Create the necessary agents for a task.
-
-        Args:
-            task (str): The task to create agents for
-            *args: Variable length argument list
-            **kwargs: Arbitrary keyword arguments
-
-        Returns:
-            list: List of created agents
-        """
-        logger.info("Creating agents for task")
-        model = OpenAIFunctionCaller(
-            system_prompt=BOSS_SYSTEM_PROMPT,
-            api_key=os.getenv("OPENAI_API_KEY"),
-            temperature=0.1,
-            base_model=Agents,
-            model_name="gpt-4o",
-        )
-
-        agents_dictionary = model.run(task)
-
-        logger.info("Agents successfully created")
-        logger.info(f"Agents: {len(agents_dictionary.agents)}")
-
-        total_tokens = any_to_str(agents_dictionary)
-
-        tokens = count_tokens(total_tokens)
-        # logger.info(f"Tokens: {tokens}")
-
-        # # Convert dictionary to SwarmConfig if needed
-        # if isinstance(agents_dictionary, dict):
-        #     agents_dictionary = Agents(**agents_dictionary)
-
-        # Create agents from config
-        agents = []
-        for agent_config in agents_dictionary.agents:
-            # Convert dict to AgentConfig if needed
-            if isinstance(agent_config, dict):
-                agent_config = Agents(**agent_config)
-
-            agent = self.build_agent(
-                agent_name=agent_config.model_name,
-                agent_description=agent_config.description,
-                agent_system_prompt=agent_config.system_prompt,
-                model_name=agent_config.model_name,
-                max_loops=agent_config.max_loops,
-                dynamic_temperature_enabled=True,
-                auto_generate_prompt=agent_config.auto_generate_prompt,
-                role=agent_config.role,
-                max_tokens=agent_config.max_tokens,
-                temperature=agent_config.temperature,
-            )
-            agents.append(agent)
-
-        return agents, tokens
-
-    def build_agent(
-        self,
-        agent_name: str,
-        agent_description: str,
-        agent_system_prompt: str,
-        max_loops: int = 1,
-        model_name: str = "gpt-4o",
-        dynamic_temperature_enabled: bool = True,
-        auto_generate_prompt: bool = False,
-        role: str = "worker",
-        max_tokens: int = 8192,
-        temperature: float = 0.5,
-    ):
-        """Build a single agent with the given specifications.
-
-        Args:
-            agent_name (str): Name of the agent
-            agent_description (str): Description of the agent's purpose
-            agent_system_prompt (str): The system prompt for the agent
-
-        Returns:
-            Agent: The constructed agent instance
-        """
-        logger.info(f"Building agent: {agent_name}")
-        agent = Agent(
-            agent_name=agent_name,
-            description=agent_description,
-            system_prompt=agent_system_prompt,
-            model_name=model_name,
-            max_loops=max_loops,
-            dynamic_temperature_enabled=dynamic_temperature_enabled,
-            context_length=200000,
-            output_type="str",  # "json", "dict", "csv" OR "string" soon "yaml" and
-            streaming_on=False,
-            auto_generate_prompt=auto_generate_prompt,
-            role=role,
-            max_tokens=max_tokens,
-            temperature=temperature,
-        )
-
-        return agent
 
 
 class ScheduledJob(Thread):
@@ -511,18 +288,6 @@ async def get_api_key_logs(api_key: str) -> List[Dict[str, Any]]:
         )
 
 
-def auto_create_agents(task: str, api_key: str) -> List[Agent]:
-    builder = AgentsBuilder()
-
-    agents, cost = builder.run(task=task)
-
-    logger.info("Agents created: {}", agents)
-    logger.info("Cost incurred for agent creation: {}", cost)
-
-    # calculate_and_deduct_token_cost(cost, api_key, "autonomous_agent_creation")
-    return agents
-
-
 def create_swarm(swarm_spec: SwarmSpec, api_key: str):
     try:
         if swarm_spec.task is None:
@@ -538,8 +303,11 @@ def create_swarm(swarm_spec: SwarmSpec, api_key: str):
                 "No agents specified. Auto-creating agents for task: {}",
                 swarm_spec.task,
             )
-            agents = auto_create_agents(swarm_spec.task, api_key)
-            logger.info("Agents created: {}", agents)
+
+            raise HTTPException(
+                status_code=400,
+                detail=f"No agents specified. Auto-creating agents for task: {swarm_spec.task}",
+            )
         else:
             agents = []
             for agent_spec in swarm_spec.agents:
@@ -600,8 +368,31 @@ def create_swarm(swarm_spec: SwarmSpec, api_key: str):
             rearrange_flow=swarm_spec.rearrange_flow,
         )
 
+        # Calculate costs
+        start_time = time()
+
         # Run the swarm task
         output = swarm.run(task=swarm_spec.task)
+
+        # Calculate execution time
+        execution_time = time() - start_time
+
+        # Calculate costs
+        cost_info = calculate_swarm_cost(
+            agents=agents,
+            input_text=swarm_spec.task,
+            execution_time=execution_time,
+            agent_outputs=output,
+        )
+
+        print(cost_info)
+
+        deduct_credits(
+            api_key,
+            cost_info["total_cost"],
+            f"swarm_execution_{swarm_spec.name}",
+        )
+
         logger.info("Swarm task executed successfully: {}", swarm_spec.task)
         return output
     except HTTPException as http_exc:
@@ -658,39 +449,13 @@ async def run_swarm_completion(
 
         # Log start of swarm execution
         logger.info(f"Starting swarm {swarm_name} with {len(agents)} agents")
-        start_time = time()
 
         # Create and run the swarm
         logger.debug(f"Creating swarm object for {swarm_name}")
+
+        start_time = time()
         result = create_swarm(swarm, x_api_key)
         logger.debug(f"Running swarm task: {swarm.task}")
-
-        # Calculate execution time
-        execution_time = time() - start_time
-        logger.info(
-            f"Swarm {swarm_name} executed in {round(execution_time, 2)} seconds"
-        )
-
-        # Calculate costs
-        logger.debug(f"Calculating costs for swarm {swarm_name}")
-        cost_info = calculate_swarm_cost(
-            agents=agents,
-            input_text=swarm.task,
-            agent_outputs=result,
-            execution_time=execution_time,
-        )
-        logger.info(f"Cost calculation completed for swarm {swarm_name}: {cost_info}")
-
-        # Deduct credits based on calculated cost
-        logger.debug(
-            f"Deducting credits for swarm {swarm_name} with cost {cost_info['total_cost']}"
-        )
-
-        deduct_credits(
-            x_api_key,
-            cost_info["total_cost"],
-            f"swarm_execution_{swarm_name}",
-        )
 
         # Format the response
         response = {
@@ -700,13 +465,7 @@ async def run_swarm_completion(
             "swarm_type": swarm.swarm_type,
             "task": swarm.task,
             "output": result,
-            "metadata": {
-                "max_loops": swarm.max_loops,
-                "num_agents": len(agents),
-                "execution_time_seconds": round(execution_time, 2),
-                "completion_time": time(),
-                "billing_info": cost_info,
-            },
+            "number_of_agents": len(agents),
         }
         logger.info(response)
         await log_api_request(x_api_key, response)
@@ -832,7 +591,7 @@ def calculate_swarm_cost(
     # Base costs per unit (these could be moved to environment variables)
     COST_PER_AGENT = 0.01  # Base cost per agent
     COST_PER_1M_INPUT_TOKENS = 2.00  # Cost per 1M input tokens
-    COST_PER_1M_OUTPUT_TOKENS = 6.00  # Cost per 1M output tokens
+    COST_PER_1M_OUTPUT_TOKENS = 4.50  # Cost per 1M output tokens
 
     # Get current time in California timezone
     california_tz = pytz.timezone("America/Los_Angeles")
@@ -934,7 +693,6 @@ def calculate_swarm_cost(
     except Exception as e:
         logger.error(f"Error calculating swarm cost: {str(e)}")
         raise ValueError(f"Failed to calculate swarm cost: {str(e)}")
-
 
 # --- FastAPI Application Setup ---
 
@@ -1043,14 +801,6 @@ async def get_logs(x_api_key: str = Header(...)) -> Dict[str, Any]:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)
         )
-
-
-# @app.post("/v1/swarm/cost-prediction")
-# async def cost_prediction(swarm: SwarmSpec) -> Dict[str, Any]:
-#     """
-#     Predict the cost of running a swarm.
-#     """
-#     return {"status": "success", "cost": calculate_swarm_cost(swarm)})
 
 
 @app.post(
