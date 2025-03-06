@@ -241,6 +241,6 @@ Common HTTP status codes:
 ## Getting Support
 
 For questions or support:
-- Join our [Discord server](https://discord.gg/agora-999382051935506503)
 - Check the [documentation](https://docs.swarms.world/en/latest/swarms_cloud/swarms_api/)
+- Pricing Docs: [Pricing Docs](https://docs.swarms.world/en/latest/swarms_cloud/api_pricing/)
 - Contact kye@swarms.world
