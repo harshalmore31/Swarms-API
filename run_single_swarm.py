@@ -73,10 +73,20 @@ def get_logs():
     return output
 
 
+def get_swarm_types():
+    response = requests.get(f"{BASE_URL}/v1/swarms/available")
+    print(response)
+    return response.json()
+
+
 if __name__ == "__main__":
-    result = run_single_swarm()
-    print("Swarm Result:")
-    print(result)
+    # result = run_single_swarm()
+    # print("Swarm Result:")
+    # print(result)
+
+    swarm_types = get_swarm_types()
+    print("Swarm Types:")
+    print(swarm_types)
 
     # logs = get_logs()
     # logs = json.dumps(logs, indent=4)

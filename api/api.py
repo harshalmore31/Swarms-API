@@ -210,6 +210,7 @@ def check_api_key(api_key: str) -> bool:
     )
     return bool(response.data)
 
+
 @lru_cache(maxsize=1000)
 def get_user_id_from_api_key(api_key: str) -> str:
     """
@@ -682,6 +683,23 @@ def calculate_swarm_cost(
         raise ValueError(f"Failed to calculate swarm cost: {str(e)}")
 
 
+def get_swarm_types():
+    """Returns a list of available swarm types"""
+    return [
+        "AgentRearrange",
+        "MixtureOfAgents",
+        "SpreadSheetSwarm",
+        "SequentialWorkflow",
+        "ConcurrentWorkflow",
+        "GroupChat",
+        "MultiAgentRouter",
+        "AutoSwarmBuilder",
+        "HiearchicalSwarm",
+        "auto",
+        "MajorityVoting",
+    ]
+
+
 # --- FastAPI Application Setup ---
 
 app = FastAPI(
@@ -711,6 +729,19 @@ def root():
 @app.get("/health", dependencies=[Depends(rate_limiter)])
 def health():
     return {"status": "ok"}
+
+
+@app.get(
+    "/v1/swarms/available",
+    dependencies=[
+        Depends(rate_limiter),
+    ],
+)
+async def check_swarm_types() -> List[str]:
+    """
+    Check the available swarm types.
+    """
+    return get_swarm_types()
 
 
 @app.post(
@@ -767,6 +798,22 @@ async def run_batch_completions(
             )
 
     return results
+
+
+@app.get(
+    "/v1/swarms/available",
+    dependencies=[
+        Depends(verify_api_key),
+        Depends(rate_limiter),
+    ],
+)
+async def get_available_swarms(x_api_key: str = Header(...)) -> Dict[str, Any]:
+    """
+    Get all available swarms.
+    """
+    available_swarms = await SwarmType
+    print(available_swarms)  # Print the list of available swarms
+    return available_swarms
 
 
 # Add this new endpoint
