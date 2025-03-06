@@ -210,18 +210,6 @@ def check_api_key(api_key: str) -> bool:
     )
     return bool(response.data)
 
-
-# class ExternalAgent:
-#     def __init__(self, base_url: str, parameters: Dict[str, Any], headers: Dict[str, Any]):
-#         self.base_url = base_url
-#         self.parameters = parameters
-#         self.headers = headers
-
-#     def run(self, task: str) -> Dict[str, Any]:
-#         response = requests.post(self.base_url, json=self.parameters, headers=self.headers)
-#         return response.json()
-
-
 @lru_cache(maxsize=1000)
 def get_user_id_from_api_key(api_key: str) -> str:
     """
