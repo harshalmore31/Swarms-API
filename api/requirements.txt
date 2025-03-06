@@ -10,3 +10,4 @@ loguru
 torch
 transformers
 pytz
+pydub

@@ -8,7 +8,7 @@ from typing import Dict, List, Optional
 
 from pydantic import BaseModel, Field
 
-from test import SwarmProtocol
+from experimental.swarm_protocol.test import SwarmProtocol
 
 # Initialize the Swarm Protocol wrapper
 swarm_app = SwarmProtocol(app_name="Financial Analysis Swarm API", version="1.0.0")

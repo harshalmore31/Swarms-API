@@ -173,3 +173,4 @@ docker run -p 8080:8080 \
 - [ ] Add async streaming output 
 - [ ] Add autonomous agent builder if the user doesn't upload agents, we should make them autonomously through the agent builder
 - [ ] Integrate gunicorn to make the api faster
+- [ ] Add speech inputs and speech outputs as well and charge more credits for that

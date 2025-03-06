@@ -30,6 +30,9 @@ load_dotenv()
 # Define rate limit parameters
 RATE_LIMIT = 100  # Max requests
 TIME_WINDOW = 60  # Time window in seconds
+# Replace with your actual API key
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+WHISPER_API_URL = "https://api.openai.com/v1/audio/transcriptions"  # Change to /audio/translations if needed
 
 # In-memory store for tracking requests
 request_counts = defaultdict(lambda: {"count": 0, "start_time": time()})
@@ -278,6 +281,7 @@ async def get_api_key_logs(api_key: str) -> List[Dict[str, Any]]:
 
 def create_swarm(swarm_spec: SwarmSpec, api_key: str):
     try:
+
         if swarm_spec.task is None:
             logger.error("Swarm creation failed: 'task' field is missing.")
             raise HTTPException(
