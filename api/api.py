@@ -25,6 +25,7 @@ from pydantic import BaseModel, Field
 from swarms import Agent, SwarmRouter, SwarmType
 from swarms.utils.litellm_tokenizer import count_tokens
 
+
 load_dotenv()
 
 # Define rate limit parameters
@@ -454,6 +455,7 @@ async def run_swarm_completion(
             "task": swarm.task,
             "output": result,
             "number_of_agents": len(agents),
+            "input_config": swarm.model_dump(),
         }
         logger.info(response)
         await log_api_request(x_api_key, response)
@@ -758,6 +760,7 @@ async def run_swarm(swarm: SwarmSpec, x_api_key=Header(...)) -> Dict[str, Any]:
     return await run_swarm_completion(swarm, x_api_key)
 
 
+@app.post("/v1/swarm/completions/")
 @app.post(
     "/v1/swarm/batch/completions",
     dependencies=[

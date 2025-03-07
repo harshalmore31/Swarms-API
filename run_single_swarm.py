@@ -8,7 +8,7 @@ import json
 load_dotenv()
 
 API_KEY = os.getenv("SWARMS_API_KEY")
-BASE_URL = "http://localhost:8080"
+BASE_URL = "https://swarms-api-285321057562.us-east1.run.app"
 
 headers = {"x-api-key": API_KEY, "Content-Type": "application/json"}
 
@@ -79,16 +79,17 @@ def get_swarm_types():
     return response.json()
 
 
-if __name__ == "__main__":
-    # result = run_single_swarm()
-    # print("Swarm Result:")
-    # print(result)
 
-    swarm_types = get_swarm_types()
-    print("Swarm Types:")
-    print(swarm_types)
+
+if __name__ == "__main__":
+    result = run_single_swarm()
+    print("Swarm Result:")
+    print(result)
+
+    # swarm_types = get_swarm_types()
+    # print("Swarm Types:")
+    # print(swarm_types)
 
     # logs = get_logs()
     # logs = json.dumps(logs, indent=4)
     # print("Logs:")
-    # print(logs)
