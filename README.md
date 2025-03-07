@@ -224,10 +224,6 @@ API usage consumes credits based on:
 
 For detailed pricing information, visit the [API Pricing](https://docs.swarms.world/en/latest/swarms_cloud/api_pricing/) page.
 
-## Rate Limiting
-
-The API implements a rate limit of 100 requests per 60-second window per client IP.
-
 ## Error Handling
 
 Common HTTP status codes:
