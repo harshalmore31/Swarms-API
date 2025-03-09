@@ -283,7 +283,7 @@ async def get_api_key_logs(api_key: str) -> List[Dict[str, Any]]:
 def create_swarm(swarm_spec: SwarmSpec, api_key: str):
     try:
 
-        if swarm_spec.task is None:
+        if swarm_spec.task is None and swarm_spec.tasks is None:
             logger.error("Swarm creation failed: 'task' field is missing.")
             raise HTTPException(
                 status_code=400,
