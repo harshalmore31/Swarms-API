@@ -47,7 +47,7 @@ def run_single_swarm():
             },
         ],
         "max_loops": 1,
-        "swarm_type": "SequentialWorkflow",
+        "swarm_type": "ConcurrentWorkflow",
         "task": "What are the best etfs and index funds for ai and tech?",
         "output_type": "dict",
     }
@@ -77,8 +77,6 @@ def get_swarm_types():
     response = requests.get(f"{BASE_URL}/v1/swarms/available")
     print(response)
     return response.json()
-
-
 
 
 if __name__ == "__main__":
