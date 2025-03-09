@@ -25,7 +25,6 @@ from pydantic import BaseModel, Field
 from swarms import Agent, SwarmRouter, SwarmType
 from swarms.utils.litellm_tokenizer import count_tokens
 
-
 load_dotenv()
 
 # Define rate limit parameters
@@ -159,6 +158,11 @@ class SwarmSpec(BaseModel):
     schedule: Optional[ScheduleSpec] = Field(
         None,
         description="Details regarding the scheduling of the swarm's execution, including timing and timezone information.",
+    )
+
+    tasks: Optional[List[str]] = Field(
+        None,
+        description="A list of tasks that the swarm should complete.",
     )
 
 
@@ -361,7 +365,11 @@ def create_swarm(swarm_spec: SwarmSpec, api_key: str):
         start_time = time()
 
         # Run the swarm task
-        output = swarm.run(task=swarm_spec.task)
+
+        if swarm_spec.tasks is not None:
+            output = swarm.batch_run(tasks=swarm_spec.tasks)
+        else:
+            output = swarm.run(task=swarm_spec.task)
 
         # Calculate execution time
         execution_time = time() - start_time
