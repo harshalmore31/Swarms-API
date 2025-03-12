@@ -94,7 +94,7 @@ class AgentSpec(BaseModel):
     # tools: Optional[List[Any]] = Field(
     #     description="A list of tools that the agent can use to complete its task."
     # )
-    tools_dictionary: Optional[Dict[str, Any]] = Field(
+    tools_dictionary: Optional[List[Dict[str, Any]]] = Field(
         description="A dictionary of tools that the agent can use to complete its task."
     )
 
@@ -365,7 +365,7 @@ def create_swarm(swarm_spec: SwarmSpec, api_key: str):
                         agent_name=agent_spec.agent_name,
                         description=agent_spec.description,
                         system_prompt=agent_spec.system_prompt,
-                        model_name=agent_spec.model_name or "gpt-4o",
+                        model_name=agent_spec.model_name or "gpt-4o-mini",
                         auto_generate_prompt=agent_spec.auto_generate_prompt or False,
                         max_tokens=agent_spec.max_tokens or 8192,
                         temperature=agent_spec.temperature or 0.5,
