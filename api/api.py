@@ -360,9 +360,9 @@ def create_swarm(swarm_spec: SwarmSpec, api_key: str):
                         logger.error("Agent creation failed: Model name is required.")
                         raise ValueError("Model name is required.")
 
-                    tools_dictionary = agent_spec.tools_dictionary
-                    if tools_dictionary is None:
-                        tools_dictionary = []
+                    # tools_dictionary = agent_spec.tools_dictionary
+                    # if tools_dictionary is None:
+                    #     tools_dictionary = []
 
                     # Create the agent
                     agent = Agent(
