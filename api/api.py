@@ -94,9 +94,9 @@ class AgentSpec(BaseModel):
     # tools: Optional[List[Any]] = Field(
     #     description="A list of tools that the agent can use to complete its task."
     # )
-    tools_dictionary: Optional[List[Dict[str, Any]]] = Field(
-        description="A dictionary of tools that the agent can use to complete its task."
-    )
+    # tools_dictionary: Optional[List[Dict[str, Any]]] = Field(
+    #     description="A dictionary of tools that the agent can use to complete its task."
+    # )
 
 
 class Agents(BaseModel):
@@ -360,6 +360,10 @@ def create_swarm(swarm_spec: SwarmSpec, api_key: str):
                         logger.error("Agent creation failed: Model name is required.")
                         raise ValueError("Model name is required.")
 
+                    tools_dictionary = agent_spec.tools_dictionary
+                    if tools_dictionary is None:
+                        tools_dictionary = []
+
                     # Create the agent
                     agent = Agent(
                         agent_name=agent_spec.agent_name,
@@ -372,7 +376,7 @@ def create_swarm(swarm_spec: SwarmSpec, api_key: str):
                         role=agent_spec.role or "worker",
                         max_loops=agent_spec.max_loops or 1,
                         dynamic_temperature_enabled=True,
-                        tools_list_dictionary=agent_spec.tools_dictionary,
+                        # tools_list_dictionary=tools_dictionary,
                     )
 
                     agents.append(agent)
@@ -494,7 +498,7 @@ async def run_swarm_completion(
         # Create and run the swarm
         logger.debug(f"Creating swarm object for {swarm_name}")
 
-        start_time = time()
+        time()
         result = create_swarm(swarm, x_api_key)
         logger.debug(f"Running swarm task: {swarm.task}")
 
