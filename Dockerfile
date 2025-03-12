@@ -30,5 +30,31 @@ USER appuser
 # Expose port 80 for the application
 EXPOSE 8080
 
-# Start the API using Uvicorn
-CMD ["gunicorn", "api:app", "--workers", "4", "--worker-class", "uvicorn.workers.UvicornWorker", "--bind", "0.0.0.0:8080", "--timeout", "120"]
+# Create a startup script within the Dockerfile
+RUN echo '#!/bin/bash\n\
+# Calculate optimal number of workers\n\
+# Common formula: (2 * CPU cores) + 1\n\
+CORES=$(nproc)\n\
+WORKERS=$((CORES * 2 + 1))\n\
+\n\
+echo "Starting with $WORKERS workers on $CORES CPU cores"\n\
+\n\
+# Start Gunicorn with production settings\n\
+exec gunicorn api:app \\\n\
+  --workers=$WORKERS \\\n\
+  --worker-class=uvicorn.workers.UvicornWorker \\\n\
+  --bind=0.0.0.0:8080 \\\n\
+  --timeout=120 \\\n\
+  --keepalive=65 \\\n\
+  --max-requests=1000 \\\n\
+  --max-requests-jitter=50 \\\n\
+  --graceful-timeout=30 \\\n\
+  --log-level=info \\\n\
+  --access-logfile=- \\\n\
+  --error-logfile=- \\\n\
+  --worker-tmp-dir=/dev/shm \\\n\
+  --preload\n\
+' > /start.sh && chmod +x /start.sh
+
+# Use the startup script as the entry point
+CMD ["/start.sh"]
