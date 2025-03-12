@@ -23,6 +23,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from loguru import logger
 from pydantic import BaseModel, Field
 from swarms import Agent, SwarmRouter, SwarmType
+from swarms.agents.reasoning_agents import OutputType, agent_types
 from swarms.utils.litellm_tokenizer import count_tokens
 
 load_dotenv()
@@ -30,6 +31,7 @@ load_dotenv()
 # Define rate limit parameters
 RATE_LIMIT = 100  # Max requests
 TIME_WINDOW = 60  # Time window in seconds
+
 # In-memory store for tracking requests
 request_counts = defaultdict(lambda: {"count": 0, "start_time": time()})
 
@@ -92,6 +94,9 @@ class AgentSpec(BaseModel):
     # tools: Optional[List[Any]] = Field(
     #     description="A list of tools that the agent can use to complete its task."
     # )
+    tools_dictionary: Optional[Dict[str, Any]] = Field(
+        description="A dictionary of tools that the agent can use to complete its task."
+    )
 
 
 class Agents(BaseModel):
@@ -110,6 +115,44 @@ class ScheduleSpec(BaseModel):
     timezone: Optional[str] = Field(
         "UTC",
         description="The timezone in which the scheduled time is defined, allowing for proper scheduling across different regions.",
+    )
+
+
+class ReasoningAgentSpec(BaseModel):
+    agent_name: str = Field(
+        "reasoning_agent",
+        description="The name of the reasoning agent, which identifies its role and functionality within the swarm.",
+    )
+    description: str = Field(
+        "A reasoning agent that can answer questions and help with tasks.",
+        description="A detailed explanation of the agent's purpose, capabilities, and any specific tasks it is designed to perform.",
+    )
+    model_name: str = Field(
+        "gpt-4o-mini",
+        description="The name of the AI model that the agent will utilize for processing tasks and generating outputs. For example: gpt-4o, gpt-4o-mini, openai/o3-mini",
+    )
+    system_prompt: str = Field(
+        "You are a helpful assistant that can answer questions and help with tasks.",
+        description="The initial instruction or context provided to the agent, guiding its behavior and responses during execution.",
+    )
+    max_loops: int = Field(
+        1,
+        description="The maximum number of times the agent is allowed to repeat its task, enabling iterative processing if necessary.",
+    )
+    swarm_type: agent_types = Field(
+        "reasoning_duo",
+        description="The type of reasoning swarm to use (e.g., reasoning duo, self-consistency, IRE).",
+    )
+    num_samples: int = Field(
+        1, description="The number of samples to generate for self-consistency agents."
+    )
+    output_type: OutputType = Field(
+        "dict", description="The format of the output (e.g., dict, list)."
+    )
+
+    task: str = Field(
+        None,
+        description="The specific task or objective that the swarm is designed to accomplish.",
     )
 
 
@@ -329,6 +372,7 @@ def create_swarm(swarm_spec: SwarmSpec, api_key: str):
                         role=agent_spec.role or "worker",
                         max_loops=agent_spec.max_loops or 1,
                         dynamic_temperature_enabled=True,
+                        tools_list_dictionary=agent_spec.tools_dictionary,
                     )
 
                     agents.append(agent)
@@ -480,6 +524,90 @@ async def run_swarm_completion(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to run swarm: {e}",
         )
+
+
+# def create_reasoning_agent(reasoning_agent_spec: ReasoningAgentSpec, api_key: str):
+#     logger.info("Creating reasoning agent: {}", reasoning_agent_spec.agent_name)
+
+#     # Validate task field
+#     if reasoning_agent_spec.task is None:
+#         logger.error("Reasoning agent creation failed: 'task' field is missing.")
+#         raise HTTPException(
+#             status_code=400,
+#             detail="The 'task' field is mandatory for reasoning agent creation. Please provide a valid task description to proceed.",
+#         )
+
+#     try:
+#         log_api_request(api_key, reasoning_agent_spec.model_dump())
+
+#         reasoning_agent = ReasoningAgentRouter(
+#             agent_name=reasoning_agent_spec.agent_name,
+#             description=reasoning_agent_spec.description,
+#             model_name=reasoning_agent_spec.model_name,
+#             system_prompt=reasoning_agent_spec.system_prompt,
+#             max_loops=reasoning_agent_spec.max_loops,
+#             swarm_type=reasoning_agent_spec.swarm_type,
+#             num_samples=reasoning_agent_spec.num_samples,
+#             output_type="dict",
+#         )
+
+#         logger.debug("Running reasoning agent task: {}", reasoning_agent_spec.task)
+
+#         start_time = time()
+
+#         output = reasoning_agent.run(reasoning_agent_spec.task)
+
+#         print(output)
+
+#         # Calculate costs
+#         cost_info = calculate_swarm_cost(
+#             agents=[reasoning_agent],
+#             input_text=reasoning_agent_spec.task,
+#             execution_time=time() - start_time,
+#             agent_outputs=any_to_str(output),
+#         )
+
+#         # print(cost_info)
+
+#         deduct_credits(
+#             api_key,
+#             cost_info["total_cost"],
+#             f"reasoning_agent_{reasoning_agent_spec.agent_name}: Agent type {reasoning_agent_spec.swarm_type}",
+#         )
+
+#         if output is None:
+#             raise HTTPException(
+#                 status_code=400,
+#                 detail="The reasoning agent returned no output. Please try again.",
+#             )
+
+#         result = {
+#             "status": "success",
+#             "agent-name": reasoning_agent_spec.agent_name,
+#             "agent-description": reasoning_agent_spec.description,
+#             "agent-type": reasoning_agent_spec.swarm_type,
+#             "outputs": output,
+#             "input_config": reasoning_agent_spec.model_dump(),
+#             "costs": cost_info,
+#         }
+
+#         log_api_request(api_key, result)
+#         logger.info(
+#             "Successfully created reasoning agent: {}", reasoning_agent_spec.agent_name
+#         )
+
+#         return result
+
+#     except Exception as e:
+#         logger.error(
+#             "Error creating reasoning agent {}: {}",
+#             reasoning_agent_spec.agent_name,
+#             str(e),
+#         )
+#         raise HTTPException(
+#             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+#             detail=f"Failed to create reasoning agent: {e}",
+#         )
 
 
 def deduct_credits(api_key: str, amount: float, product_name: str) -> None:
@@ -716,7 +844,7 @@ app = FastAPI(
     title="Swarm Agent API",
     description="API for managing and executing Python agents in the cloud without Docker/Kubernetes.",
     version="1.0.0",
-    debug=True,
+    # debug=True,
 )
 
 # Enable CORS (adjust origins as needed)
@@ -768,7 +896,17 @@ async def run_swarm(swarm: SwarmSpec, x_api_key=Header(...)) -> Dict[str, Any]:
     return await run_swarm_completion(swarm, x_api_key)
 
 
-@app.post("/v1/swarm/completions/")
+# @app.post(
+#     "/v1/agent/completions",
+#     dependencies=[Depends(verify_api_key), Depends(rate_limiter)],
+# )
+# def run_agent(agent: ReasoningAgentSpec, x_api_key=Header(...)) -> Dict[str, Any]:
+#     """
+#     Run an agent with the specified task.
+#     """
+#     return create_reasoning_agent(agent, x_api_key)
+
+
 @app.post(
     "/v1/swarm/batch/completions",
     dependencies=[
