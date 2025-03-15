@@ -80,7 +80,7 @@ class AgentSpec(BaseModel):
     )
     auto_generate_prompt: Optional[bool] = Field(
         default=False,
-        description="A flag indicating whether the agent should automatically create prompts based on the task requirements."
+        description="A flag indicating whether the agent should automatically create prompts based on the task requirements.",
     )
     max_tokens: Optional[int] = Field(
         None,
