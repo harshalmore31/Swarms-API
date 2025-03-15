@@ -336,66 +336,91 @@ async def get_api_key_logs(api_key: str) -> List[Dict[str, Any]]:
         )
 
 
+def validate_swarm_spec(swarm_spec: SwarmSpec) -> tuple[str, Optional[List[str]]]:
+    """
+    Validates the swarm specification and returns the task(s) to be executed.
+
+    Args:
+        swarm_spec: The swarm specification to validate
+
+    Returns:
+        tuple containing:
+            - task string to execute (or stringified messages)
+            - list of tasks if batch processing, None otherwise
+
+    Raises:
+        HTTPException: If validation fails
+    """
+    # Check for required task field
+    if swarm_spec.task is None and swarm_spec.tasks is None:
+        logger.error("Swarm creation failed: 'task' field is missing.")
+        raise HTTPException(
+            status_code=400,
+            detail="The 'task' field is mandatory for swarm creation. Please provide a valid task description to proceed.",
+        )
+
+    # Determine task(s) to execute
+    task = None
+    tasks = None
+    if swarm_spec.task is not None:
+        task = swarm_spec.task
+    else:
+        tasks = swarm_spec.tasks
+
+    # Check for agents if required
+    if (
+        swarm_spec.swarm_type != "MALT"
+        and swarm_spec.swarm_type != "DeepResearchSwarm"
+        and (not swarm_spec.agents or len(swarm_spec.agents) == 0)
+    ):
+        logger.info(
+            "No agents specified. Auto-creating agents for task: {}",
+            swarm_spec.task,
+        )
+        raise HTTPException(
+            status_code=400,
+            detail=f"No agents specified. Auto-creating agents for task: {swarm_spec.task}",
+        )
+
+    # Handle messages if present
+    if swarm_spec.messages is not None:
+        task = any_to_str(swarm_spec.messages)
+
+    return task, tasks
+
+
 def create_swarm(swarm_spec: SwarmSpec, api_key: str):
+    """
+    Creates and executes a swarm based on the provided specification.
+
+    Args:
+        swarm_spec: The swarm specification
+        api_key: API key for authentication and billing
+
+    Returns:
+        The swarm execution results
+
+    Raises:
+        HTTPException: If swarm creation or execution fails
+    """
     try:
+        # Validate the swarm spec
+        task, tasks = validate_swarm_spec(swarm_spec)
 
-        if swarm_spec.task is None and swarm_spec.tasks is None:
-            logger.error("Swarm creation failed: 'task' field is missing.")
-            raise HTTPException(
-                status_code=400,
-                detail="The 'task' field is mandatory for swarm creation. Please provide a valid task description to proceed.",
-            )
-
-        if swarm_spec.task is not None:
-            task = swarm_spec.task
-
-        if swarm_spec.tasks is None:
-            raise HTTPException(
-                status_code=400,
-                detail="The 'tasks' field is mandatory for swarm creation. Please provide a valid task description to proceed.",
-            )
-
-        else:
-            tasks = swarm_spec.tasks
-            
-
-
-        # Validate swarm_spec
-        if (swarm_spec.swarm_type != "MALT" and 
-            swarm_spec.swarm_type != "DeepResearchSwarm" and 
-            (not swarm_spec.agents or len(swarm_spec.agents) == 0)):
-            logger.info(
-                "No agents specified. Auto-creating agents for task: {}",
-                swarm_spec.task,
-            )
-
-            raise HTTPException(
-                status_code=400,
-                detail=f"No agents specified. Auto-creating agents for task: {swarm_spec.task}",
-            )
-
-        if swarm_spec.messages is not None:
-            task = any_to_str(swarm_spec.messages)
-
-        else:
-            agents = []
+        # Create agents if specified
+        agents = []
+        if swarm_spec.agents is not None:
             for agent_spec in swarm_spec.agents:
                 try:
                     # Handle both dict and AgentSpec objects
                     if isinstance(agent_spec, dict):
                         agent_spec = AgentSpec(**agent_spec)
 
-                    # Validate agent_spec fields
+                    # Validate required agent fields
                     if not agent_spec.agent_name:
-                        logger.error("Agent creation failed: Agent name is required.")
                         raise ValueError("Agent name is required.")
                     if not agent_spec.model_name:
-                        logger.error("Agent creation failed: Model name is required.")
                         raise ValueError("Model name is required.")
-
-                    # tools_dictionary = agent_spec.tools_dictionary
-                    # if tools_dictionary is None:
-                    #     tools_dictionary = []
 
                     # Create the agent
                     agent = Agent(
@@ -409,25 +434,29 @@ def create_swarm(swarm_spec: SwarmSpec, api_key: str):
                         role=agent_spec.role or "worker",
                         max_loops=agent_spec.max_loops or 1,
                         dynamic_temperature_enabled=True,
-                        # tools_list_dictionary=tools_dictionary,
                     )
 
                     agents.append(agent)
                     logger.info("Successfully created agent: {}", agent_spec.agent_name)
+
                 except ValueError as ve:
                     logger.error(
                         "Validation error for agent {}: {}",
                         getattr(agent_spec, "agent_name", "unknown"),
                         str(ve),
                     )
-                    raise
-                except Exception as agent_error:
+                    raise HTTPException(
+                        status_code=400, detail=f"Agent validation error: {str(ve)}"
+                    )
+                except Exception as e:
                     logger.error(
                         "Error creating agent {}: {}",
                         getattr(agent_spec, "agent_name", "unknown"),
-                        str(agent_error),
+                        str(e),
                     )
-                    raise
+                    raise HTTPException(
+                        status_code=500, detail=f"Failed to create agent: {str(e)}"
+                    )
 
         # Create and configure the swarm
         swarm = SwarmRouter(
@@ -442,20 +471,17 @@ def create_swarm(swarm_spec: SwarmSpec, api_key: str):
             rearrange_flow=swarm_spec.rearrange_flow,
         )
 
-        # Calculate costs
+        # Calculate costs and execute
         start_time = time()
 
         # Run the swarm task
-
-        if swarm_spec.tasks is not None:
+        if tasks is not None:
             output = swarm.batch_run(tasks=tasks)
         else:
             output = swarm.run(task=task)
 
-        # Calculate execution time
+        # Calculate execution time and costs
         execution_time = time() - start_time
-
-        # Calculate costs
         cost_info = calculate_swarm_cost(
             agents=agents,
             input_text=swarm_spec.task,
@@ -463,8 +489,7 @@ def create_swarm(swarm_spec: SwarmSpec, api_key: str):
             agent_outputs=output,
         )
 
-        print(cost_info)
-
+        # Deduct credits
         deduct_credits(
             api_key,
             cost_info["total_cost"],
@@ -473,8 +498,8 @@ def create_swarm(swarm_spec: SwarmSpec, api_key: str):
 
         logger.info("Swarm task executed successfully: {}", swarm_spec.task)
         return output
-    except HTTPException as http_exc:
-        logger.error("HTTPException occurred while creating swarm: {}", http_exc.detail)
+
+    except HTTPException:
         raise
     except Exception as e:
         logger.error("Error creating swarm: {}", str(e))
@@ -532,7 +557,7 @@ async def run_swarm_completion(
         logger.debug(f"Creating swarm object for {swarm_name}")
 
         time()
-        
+
         try:
             result = create_swarm(swarm, x_api_key)
         except Exception as e:
@@ -541,10 +566,9 @@ async def run_swarm_completion(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail=f"Failed to run swarm: {e}",
             )
-            
-            
+
         logger.debug(f"Running swarm task: {swarm.task}")
-        
+
         if swarm.swarm_type == "MALT":
             length_of_agents = 14
         else:
@@ -889,7 +913,7 @@ async def auto_generate_agents(request: AutoGenerateAgentsSpec):
     agents = await asyncio.to_thread(agents_builder.run, task=request.task)
     end_time = time()
 
-    cost_info = calculate_swarm_cost(
+    calculate_swarm_cost(
         agents=agents_builder,
         input_text=request.task + agents_builder.system_prompt,
         execution_time=end_time - start_time,
