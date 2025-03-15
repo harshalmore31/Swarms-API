@@ -357,9 +357,13 @@ def create_swarm(swarm_spec: SwarmSpec, api_key: str):
 
         else:
             tasks = swarm_spec.tasks
+            
+
 
         # Validate swarm_spec
-        if not swarm_spec.agents or len(swarm_spec.agents) == 0:
+        if (swarm_spec.swarm_type != "MALT" and 
+            swarm_spec.swarm_type != "DeepResearchSwarm" and 
+            (not swarm_spec.agents or len(swarm_spec.agents) == 0)):
             logger.info(
                 "No agents specified. Auto-creating agents for task: {}",
                 swarm_spec.task,
