@@ -107,7 +107,7 @@ Build, deploy, and orchestrate AI agents at scale with ease. Swarms API provides
 All API endpoints (except health check) require an API key passed in the `x-api-key` header:
 
 ```bash
-curl -H "x-api-key: your_api_key" -H "Content-Type: application/json" -X POST https://swarms-api-285321057562.us-east1.run.app/v1/swarm/completions
+curl -H "x-api-key: your_api_key" -H "Content-Type: application/json" -X POST https://api.swarms.world/v1/swarm/completions
 ```
 
 ## Example Usage
@@ -123,7 +123,7 @@ import json
 load_dotenv()
 
 API_KEY = os.getenv("SWARMS_API_KEY")
-BASE_URL = "https://swarms-api-285321057562.us-east1.run.app"
+BASE_URL = "https://api.swarms.world"
 
 headers = {"x-api-key": API_KEY, "Content-Type": "application/json"}
 

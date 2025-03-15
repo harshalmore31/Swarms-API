@@ -79,6 +79,7 @@ class AgentSpec(BaseModel):
         description="The name of the AI model that the agent will utilize for processing tasks and generating outputs. For example: gpt-4o, gpt-4o-mini, openai/o3-mini"
     )
     auto_generate_prompt: Optional[bool] = Field(
+        default=False,
         description="A flag indicating whether the agent should automatically create prompts based on the task requirements."
     )
     max_tokens: Optional[int] = Field(
