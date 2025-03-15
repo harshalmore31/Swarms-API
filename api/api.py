@@ -534,6 +534,11 @@ async def run_swarm_completion(
         time()
         result = create_swarm(swarm, x_api_key)
         logger.debug(f"Running swarm task: {swarm.task}")
+        
+        if swarm.swarm_type == "MALT":
+            length_of_agents = 14
+        else:
+            length_of_agents = len(agents)
 
         # Format the response
         response = {
@@ -543,7 +548,7 @@ async def run_swarm_completion(
             "swarm_type": swarm.swarm_type,
             "task": swarm.task,
             "output": result,
-            "number_of_agents": len(agents),
+            "number_of_agents": length_of_agents,
             "input_config": swarm.model_dump(),
         }
         logger.info(response)
