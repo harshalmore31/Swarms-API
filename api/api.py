@@ -532,7 +532,17 @@ async def run_swarm_completion(
         logger.debug(f"Creating swarm object for {swarm_name}")
 
         time()
-        result = create_swarm(swarm, x_api_key)
+        
+        try:
+            result = create_swarm(swarm, x_api_key)
+        except Exception as e:
+            logger.error(f"Error running swarm: {e}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to run swarm: {e}",
+            )
+            
+            
         logger.debug(f"Running swarm task: {swarm.task}")
         
         if swarm.swarm_type == "MALT":
@@ -547,9 +557,11 @@ async def run_swarm_completion(
             "description": swarm.description,
             "swarm_type": swarm.swarm_type,
             "task": swarm.task,
+            "tasks": swarm.tasks,
+            "messages": swarm.messages,
             "output": result,
             "number_of_agents": length_of_agents,
-            "input_config": swarm.model_dump(),
+            # "input_config": swarm.model_dump(),
         }
         logger.info(response)
         await log_api_request(x_api_key, response)
