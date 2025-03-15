@@ -23,8 +23,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from loguru import logger
 from pydantic import BaseModel, Field
 from swarms import Agent, SwarmRouter, SwarmType
-from swarms.agents.reasoning_agents import OutputType, agent_types
+from swarms.structs import AgentsBuilder
+
+# from swarms.agents.reasoning_agents import OutputType, agent_types
 from swarms.utils.litellm_tokenizer import count_tokens
+from swarms.utils.any_to_str import any_to_str
 
 load_dotenv()
 
@@ -118,42 +121,42 @@ class ScheduleSpec(BaseModel):
     )
 
 
-class ReasoningAgentSpec(BaseModel):
-    agent_name: str = Field(
-        "reasoning_agent",
-        description="The name of the reasoning agent, which identifies its role and functionality within the swarm.",
-    )
-    description: str = Field(
-        "A reasoning agent that can answer questions and help with tasks.",
-        description="A detailed explanation of the agent's purpose, capabilities, and any specific tasks it is designed to perform.",
-    )
-    model_name: str = Field(
-        "gpt-4o-mini",
-        description="The name of the AI model that the agent will utilize for processing tasks and generating outputs. For example: gpt-4o, gpt-4o-mini, openai/o3-mini",
-    )
-    system_prompt: str = Field(
-        "You are a helpful assistant that can answer questions and help with tasks.",
-        description="The initial instruction or context provided to the agent, guiding its behavior and responses during execution.",
-    )
-    max_loops: int = Field(
-        1,
-        description="The maximum number of times the agent is allowed to repeat its task, enabling iterative processing if necessary.",
-    )
-    swarm_type: agent_types = Field(
-        "reasoning_duo",
-        description="The type of reasoning swarm to use (e.g., reasoning duo, self-consistency, IRE).",
-    )
-    num_samples: int = Field(
-        1, description="The number of samples to generate for self-consistency agents."
-    )
-    output_type: OutputType = Field(
-        "dict", description="The format of the output (e.g., dict, list)."
-    )
+# class ReasoningAgentSpec(BaseModel):
+#     agent_name: str = Field(
+#         "reasoning_agent",
+#         description="The name of the reasoning agent, which identifies its role and functionality within the swarm.",
+#     )
+#     description: str = Field(
+#         "A reasoning agent that can answer questions and help with tasks.",
+#         description="A detailed explanation of the agent's purpose, capabilities, and any specific tasks it is designed to perform.",
+#     )
+#     model_name: str = Field(
+#         "gpt-4o-mini",
+#         description="The name of the AI model that the agent will utilize for processing tasks and generating outputs. For example: gpt-4o, gpt-4o-mini, openai/o3-mini",
+#     )
+#     system_prompt: str = Field(
+#         "You are a helpful assistant that can answer questions and help with tasks.",
+#         description="The initial instruction or context provided to the agent, guiding its behavior and responses during execution.",
+#     )
+#     max_loops: int = Field(
+#         1,
+#         description="The maximum number of times the agent is allowed to repeat its task, enabling iterative processing if necessary.",
+#     )
+#     swarm_type: agent_types = Field(
+#         "reasoning_duo",
+#         description="The type of reasoning swarm to use (e.g., reasoning duo, self-consistency, IRE).",
+#     )
+#     num_samples: int = Field(
+#         1, description="The number of samples to generate for self-consistency agents."
+#     )
+#     output_type: OutputType = Field(
+#         "dict", description="The format of the output (e.g., dict, list)."
+#     )
 
-    task: str = Field(
-        None,
-        description="The specific task or objective that the swarm is designed to accomplish.",
-    )
+#     task: str = Field(
+#         None,
+#         description="The specific task or objective that the swarm is designed to accomplish.",
+#     )
 
 
 class SwarmSpec(BaseModel):
@@ -202,10 +205,20 @@ class SwarmSpec(BaseModel):
         None,
         description="Details regarding the scheduling of the swarm's execution, including timing and timezone information.",
     )
-
     tasks: Optional[List[str]] = Field(
         None,
         description="A list of tasks that the swarm should complete.",
+    )
+    messages: Optional[Dict[str, Any]] = Field(
+        None,
+        description="A list of messages that the swarm should complete.",
+    )
+
+
+class AutoGenerateAgentsSpec(BaseModel):
+    task: str = Field(
+        None,
+        description="The task that the swarm should complete.",
     )
 
 
@@ -333,6 +346,18 @@ def create_swarm(swarm_spec: SwarmSpec, api_key: str):
                 detail="The 'task' field is mandatory for swarm creation. Please provide a valid task description to proceed.",
             )
 
+        if swarm_spec.task is not None:
+            task = swarm_spec.task
+
+        if swarm_spec.tasks is None:
+            raise HTTPException(
+                status_code=400,
+                detail="The 'tasks' field is mandatory for swarm creation. Please provide a valid task description to proceed.",
+            )
+
+        else:
+            tasks = swarm_spec.tasks
+
         # Validate swarm_spec
         if not swarm_spec.agents or len(swarm_spec.agents) == 0:
             logger.info(
@@ -344,6 +369,10 @@ def create_swarm(swarm_spec: SwarmSpec, api_key: str):
                 status_code=400,
                 detail=f"No agents specified. Auto-creating agents for task: {swarm_spec.task}",
             )
+
+        if swarm_spec.messages is not None:
+            task = any_to_str(swarm_spec.messages)
+
         else:
             agents = []
             for agent_spec in swarm_spec.agents:
@@ -415,9 +444,9 @@ def create_swarm(swarm_spec: SwarmSpec, api_key: str):
         # Run the swarm task
 
         if swarm_spec.tasks is not None:
-            output = swarm.batch_run(tasks=swarm_spec.tasks)
+            output = swarm.batch_run(tasks=tasks)
         else:
-            output = swarm.run(task=swarm_spec.task)
+            output = swarm.run(task=task)
 
         # Calculate execution time
         execution_time = time() - start_time
@@ -700,7 +729,7 @@ def deduct_credits(api_key: str, amount: float, product_name: str) -> None:
 
 
 def calculate_swarm_cost(
-    agents: List[Agent],
+    agents: List[Any],
     input_text: str,
     execution_time: float,
     agent_outputs: Union[List[Dict[str, str]], str] = None,  # Update agent_outputs type
@@ -736,6 +765,10 @@ def calculate_swarm_cost(
         total_input_tokens = 0
         total_output_tokens = 0
         per_agent_tokens = {}
+        agent_cost = 0
+
+        if isinstance(agents, callable):
+            agent_cost += 0.01
 
         for i, agent in enumerate(agents):
             agent_input_tokens = task_tokens  # Base task tokens
@@ -825,6 +858,26 @@ def calculate_swarm_cost(
         raise ValueError(f"Failed to calculate swarm cost: {str(e)}")
 
 
+async def auto_generate_agents(request: AutoGenerateAgentsSpec):
+    """
+    Automatically generate agents for a given task.
+    """
+    agents_builder = AgentsBuilder(return_dictionary=True)
+
+    start_time = time()
+    agents = await asyncio.to_thread(agents_builder.run, task=request.task)
+    end_time = time()
+
+    cost_info = calculate_swarm_cost(
+        agents=agents_builder,
+        input_text=request.task + agents_builder.system_prompt,
+        execution_time=end_time - start_time,
+        agent_outputs=any_to_str(agents),
+    )
+
+    return agents
+
+
 def get_swarm_types():
     """Returns a list of available swarm types"""
     return [
@@ -898,6 +951,17 @@ async def run_swarm(swarm: SwarmSpec, x_api_key=Header(...)) -> Dict[str, Any]:
     Run a swarm with the specified task.
     """
     return await run_swarm_completion(swarm, x_api_key)
+
+
+@app.post(
+    "/v1/agents/auto-generate",
+    dependencies=[Depends(verify_api_key), Depends(rate_limiter)],
+)
+async def auto_generate_swarm(request: AutoGenerateAgentsSpec):
+    """
+    Automatically generate a swarm for a given task.
+    """
+    return await auto_generate_agents(request)
 
 
 # @app.post(

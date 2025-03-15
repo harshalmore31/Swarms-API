@@ -20,14 +20,14 @@ def run_health_check():
 
 def run_single_swarm():
     payload = {
-        "name": "Financial Analysis Swarm",
-        "description": "Market analysis swarm",
+        "name": "Hair Care Product Analysis Swarm",
+        "description": "Analyzes and recommends hair care products based on user needs.",
         "agents": [
             {
-                "agent_name": "Market Analyst",
-                "description": "Analyzes market trends",
-                "system_prompt": "You are a financial analyst expert.",
-                "model_name": "groq/deepseek-r1-distill-llama-70b",
+                "agent_name": "Hair Product Specialist",
+                "description": "Expert in hair care products and their benefits.",
+                "system_prompt": "You are a hair care product specialist with extensive knowledge of ingredients and their effects on different hair types.",
+                "model_name": "gpt-4o-mini",
                 "role": "worker",
                 "max_loops": 1,
                 "max_tokens": 8192,
@@ -36,10 +36,10 @@ def run_single_swarm():
                 "tools_dictionary": [],
             },
             {
-                "agent_name": "Economic Forecaster",
-                "description": "Predicts economic trends",
-                "system_prompt": "You are an expert in economic forecasting.",
-                "model_name": "groq/deepseek-r1-distill-llama-70b",
+                "agent_name": "Hair Health Advisor",
+                "description": "Provides personalized hair care advice and product recommendations.",
+                "system_prompt": "You are a hair health advisor who understands various hair concerns and can suggest suitable products.",
+                "model_name": "gpt-4o-mini",
                 "role": "worker",
                 "max_loops": 1,
                 "max_tokens": 8192,
@@ -50,7 +50,7 @@ def run_single_swarm():
         ],
         "max_loops": 1,
         "swarm_type": "ConcurrentWorkflow",
-        "task": "What are the best etfs and index funds for ai and tech?",
+        "task": "What are the best hair care products for dry and damaged hair? Provide a list of the best products and their benefits.",
         "output_type": "dict",
     }
 
