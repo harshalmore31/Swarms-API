@@ -812,8 +812,6 @@ def calculate_swarm_cost(
         per_agent_tokens = {}
         agent_cost = 0
 
-        if isinstance(agents, callable):
-            agent_cost += 0.01
 
         for i, agent in enumerate(agents):
             agent_input_tokens = task_tokens  # Base task tokens
