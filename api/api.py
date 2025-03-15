@@ -812,7 +812,6 @@ def calculate_swarm_cost(
         per_agent_tokens = {}
         agent_cost = 0
 
-
         for i, agent in enumerate(agents):
             agent_input_tokens = task_tokens  # Base task tokens
 
@@ -840,10 +839,10 @@ def calculate_swarm_cost(
                     )
                 elif isinstance(agent_outputs, str):
                     agent_output_tokens = count_tokens(agent_outputs)
+                elif isinstance(agent_outputs, dict):
+                    agent_output_tokens = count_tokens(any_to_str(agent_outputs))
                 else:
-                    agent_output_tokens = int(
-                        agent_input_tokens * 2.5
-                    )  # Estimated output tokens
+                    agent_output_tokens = any_to_str(agent_outputs)
             else:
                 agent_output_tokens = int(
                     agent_input_tokens * 2.5
