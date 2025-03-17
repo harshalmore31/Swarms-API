@@ -52,6 +52,16 @@ def run_single_swarm():
         "swarm_type": "ConcurrentWorkflow",
         "task": "What are the best etfs and index funds for ai and tech?",
         "output_type": "dict",
+        "messages": [
+            {
+                "role": "user",
+                "content": "What are the best etfs and index funds for ai and tech?",
+            },
+            {
+                "role": "Economic Forecaster",
+                "content": "Here are the best etfs and index funds for ai and tech:",
+            },
+        ],
     }
 
     response = requests.post(

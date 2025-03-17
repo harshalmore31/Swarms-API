@@ -216,7 +216,7 @@ class SwarmSpec(BaseModel):
         description="A list of messages that the swarm should complete.",
     )
 
-g
+
 class AutoGenerateAgentsSpec(BaseModel):
     task: str = Field(
         None,
