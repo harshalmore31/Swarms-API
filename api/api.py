@@ -28,6 +28,7 @@ from swarms.structs import AgentsBuilder
 # from swarms.agents.reasoning_agents import OutputType, agent_types
 from swarms.utils.litellm_tokenizer import count_tokens
 from swarms.utils.any_to_str import any_to_str
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 load_dotenv()
 
@@ -390,6 +391,65 @@ def validate_swarm_spec(swarm_spec: SwarmSpec) -> tuple[str, Optional[List[str]]
     return task, tasks
 
 
+def create_single_agent(agent_spec: Union[AgentSpec, dict]) -> Agent:
+    """
+    Creates a single agent.
+
+    Args:
+        agent_spec: Agent specification (either AgentSpec object or dict)
+
+    Returns:
+        Created Agent instance
+
+    Raises:
+        HTTPException: If agent creation fails
+    """
+    try:
+        # Convert dict to AgentSpec if needed
+        if isinstance(agent_spec, dict):
+            agent_spec = AgentSpec(**agent_spec)
+
+        # Validate required fields
+        if not agent_spec.agent_name:
+            raise ValueError("Agent name is required.")
+        if not agent_spec.model_name:
+            raise ValueError("Model name is required.")
+
+        # Create the agent
+        agent = Agent(
+            agent_name=agent_spec.agent_name,
+            description=agent_spec.description,
+            system_prompt=agent_spec.system_prompt,
+            model_name=agent_spec.model_name or "gpt-4o-mini",
+            auto_generate_prompt=agent_spec.auto_generate_prompt or False,
+            max_tokens=agent_spec.max_tokens or 8192,
+            temperature=agent_spec.temperature or 0.5,
+            role=agent_spec.role or "worker",
+            max_loops=agent_spec.max_loops or 1,
+            dynamic_temperature_enabled=True,
+        )
+
+        logger.info("Successfully created agent: {}", agent_spec.agent_name)
+        return agent
+
+    except ValueError as ve:
+        logger.error(
+            "Validation error for agent {}: {}",
+            getattr(agent_spec, "agent_name", "unknown"),
+            str(ve),
+        )
+        raise HTTPException(
+            status_code=400, detail=f"Agent validation error: {str(ve)}"
+        )
+    except Exception as e:
+        logger.error(
+            "Error creating agent {}: {}",
+            getattr(agent_spec, "agent_name", "unknown"),
+            str(e),
+        )
+        raise HTTPException(status_code=500, detail=f"Failed to create agent: {str(e)}")
+
+
 def create_swarm(swarm_spec: SwarmSpec, api_key: str):
     """
     Creates and executes a swarm based on the provided specification.
@@ -408,56 +468,37 @@ def create_swarm(swarm_spec: SwarmSpec, api_key: str):
         # Validate the swarm spec
         task, tasks = validate_swarm_spec(swarm_spec)
 
-        # Create agents if specified
+        # Create agents in parallel if specified
         agents = []
         if swarm_spec.agents is not None:
-            for agent_spec in swarm_spec.agents:
-                try:
-                    # Handle both dict and AgentSpec objects
-                    if isinstance(agent_spec, dict):
-                        agent_spec = AgentSpec(**agent_spec)
+            # Use ThreadPoolExecutor for parallel agent creation
+            with ThreadPoolExecutor(
+                max_workers=min(len(swarm_spec.agents), 10)
+            ) as executor:
+                # Submit all agent creation tasks
+                future_to_agent = {
+                    executor.submit(create_single_agent, agent_spec): agent_spec
+                    for agent_spec in swarm_spec.agents
+                }
 
-                    # Validate required agent fields
-                    if not agent_spec.agent_name:
-                        raise ValueError("Agent name is required.")
-                    if not agent_spec.model_name:
-                        raise ValueError("Model name is required.")
-
-                    # Create the agent
-                    agent = Agent(
-                        agent_name=agent_spec.agent_name,
-                        description=agent_spec.description,
-                        system_prompt=agent_spec.system_prompt,
-                        model_name=agent_spec.model_name or "gpt-4o-mini",
-                        auto_generate_prompt=agent_spec.auto_generate_prompt or False,
-                        max_tokens=agent_spec.max_tokens or 8192,
-                        temperature=agent_spec.temperature or 0.5,
-                        role=agent_spec.role or "worker",
-                        max_loops=agent_spec.max_loops or 1,
-                        dynamic_temperature_enabled=True,
-                    )
-
-                    agents.append(agent)
-                    logger.info("Successfully created agent: {}", agent_spec.agent_name)
-
-                except ValueError as ve:
-                    logger.error(
-                        "Validation error for agent {}: {}",
-                        getattr(agent_spec, "agent_name", "unknown"),
-                        str(ve),
-                    )
-                    raise HTTPException(
-                        status_code=400, detail=f"Agent validation error: {str(ve)}"
-                    )
-                except Exception as e:
-                    logger.error(
-                        "Error creating agent {}: {}",
-                        getattr(agent_spec, "agent_name", "unknown"),
-                        str(e),
-                    )
-                    raise HTTPException(
-                        status_code=500, detail=f"Failed to create agent: {str(e)}"
-                    )
+                # Collect results as they complete
+                for future in as_completed(future_to_agent):
+                    agent_spec = future_to_agent[future]
+                    try:
+                        agent = future.result()
+                        agents.append(agent)
+                    except HTTPException:
+                        # Re-raise HTTP exceptions with original status code
+                        raise
+                    except Exception as e:
+                        logger.error(
+                            "Error creating agent {}: {}",
+                            getattr(agent_spec, "agent_name", "unknown"),
+                            str(e),
+                        )
+                        raise HTTPException(
+                            status_code=500, detail=f"Failed to create agent: {str(e)}"
+                        )
 
         # Create and configure the swarm
         swarm = SwarmRouter(

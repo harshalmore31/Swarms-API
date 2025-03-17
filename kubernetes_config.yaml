@@ -1,0 +1,369 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: swarms-api
+  labels:
+    name: swarms-api
+    environment: production
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: swarms-api-config
+  namespace: swarms-api
+data:
+  RATE_LIMIT: "100"
+  TIME_WINDOW: "60"
+  LOG_LEVEL: "INFO"
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: swarms-api-secrets
+  namespace: swarms-api
+type: Opaque
+data:
+  SUPABASE_URL: "" # Base64 encoded
+  SUPABASE_KEY: "" # Base64 encoded
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: swarms-api-data
+  namespace: swarms-api
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+  storageClassName: standard
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: swarms-api
+  namespace: swarms-api
+  labels:
+    app: swarms-api
+    component: api-server
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: swarms-api
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: swarms-api
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
+    spec:
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - swarms-api
+              topologyKey: "kubernetes.io/hostname"
+      containers:
+      - name: swarms-api
+        image: your-registry.io/swarms-api:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8080
+          name: http
+        resources:
+          requests:
+            memory: "1Gi"
+            cpu: "500m"
+          limits:
+            memory: "2Gi"
+            cpu: "1000m"
+        env:
+        - name: RATE_LIMIT
+          valueFrom:
+            configMapKeyRef:
+              name: swarms-api-config
+              key: RATE_LIMIT
+        - name: TIME_WINDOW
+          valueFrom:
+            configMapKeyRef:
+              name: swarms-api-config
+              key: TIME_WINDOW
+        - name: LOG_LEVEL
+          valueFrom:
+            configMapKeyRef:
+              name: swarms-api-config
+              key: LOG_LEVEL
+        - name: SUPABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: swarms-api-secrets
+              key: SUPABASE_URL
+        - name: SUPABASE_KEY
+          valueFrom:
+            secretKeyRef:
+              name: swarms-api-secrets
+              key: SUPABASE_KEY
+        envFrom:
+        - configMapRef:
+            name: swarms-api-config
+        volumeMounts:
+        - name: swarms-api-data
+          mountPath: /app/data
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 2
+      volumes:
+      - name: swarms-api-data
+        persistentVolumeClaim:
+          claimName: swarms-api-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: swarms-api
+  namespace: swarms-api
+  labels:
+    app: swarms-api
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "8080"
+spec:
+  type: ClusterIP
+  ports:
+  - port: 80
+    targetPort: 8080
+    protocol: TCP
+    name: http
+  selector:
+    app: swarms-api
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: swarms-api-hpa
+  namespace: swarms-api
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: swarms-api
+  minReplicas: 3
+  maxReplicas: 10
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 75
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+      - type: Percent
+        value: 10
+        periodSeconds: 60
+    scaleUp:
+      stabilizationWindowSeconds: 0
+      policies:
+      - type: Percent
+        value: 100
+        periodSeconds: 30
+      - type: Pods
+        value: 4
+        periodSeconds: 30
+      selectPolicy: Max
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: swarms-api-network-policy
+  namespace: swarms-api
+spec:
+  podSelector:
+    matchLabels:
+      app: swarms-api
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          role: frontend
+    - podSelector:
+        matchLabels:
+          role: api-gateway
+    ports:
+    - protocol: TCP
+      port: 8080
+  egress:
+  - to:
+    - ipBlock:
+        cidr: 0.0.0.0/0
+        except:
+        - 10.0.0.0/8
+        - 172.16.0.0/12
+        - 192.168.0.0/16
+    ports:
+    - protocol: TCP
+      port: 443
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: swarms-api-pdb
+  namespace: swarms-api
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: swarms-api
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: swarms-api-ingress
+  namespace: swarms-api
+  annotations:
+    kubernetes.io/ingress.class: "nginx"
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "120"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "120"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/from-to-www-redirect: "true"
+spec:
+  tls:
+  - hosts:
+    - api.swarms.world
+    secretName: swarms-api-tls
+  rules:
+  - host: api.swarms.world
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: swarms-api
+            port:
+              number: 80
+---
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: swarms-api-quota
+  namespace: swarms-api
+spec:
+  hard:
+    pods: "20"
+    requests.cpu: "10"
+    requests.memory: 20Gi
+    limits.cpu: "20"
+    limits.memory: 40Gi
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: swarms-api-db-migrate
+  namespace: swarms-api
+spec:
+  template:
+    spec:
+      containers:
+      - name: db-migrate
+        image: your-registry.io/swarms-api:latest
+        command: ["python", "migrate.py"]
+        env:
+        - name: SUPABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: swarms-api-secrets
+              key: SUPABASE_URL
+        - name: SUPABASE_KEY
+          valueFrom:
+            secretKeyRef:
+              name: swarms-api-secrets
+              key: SUPABASE_KEY
+      restartPolicy: Never
+  backoffLimit: 3
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: swarms-api-cleanup
+  namespace: swarms-api
+spec:
+  schedule: "0 0 * * *"  # Daily at midnight
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+          - name: cleanup
+            image: your-registry.io/swarms-api:latest
+            command: ["python", "scripts/cleanup.py"]
+            env:
+            - name: SUPABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: swarms-api-secrets
+                  key: SUPABASE_URL
+            - name: SUPABASE_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: swarms-api-secrets
+                  key: SUPABASE_KEY
+          restartPolicy: OnFailure
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: swarms-api-monitor
+  namespace: swarms-api
+  labels:
+    release: prometheus
+spec:
+  selector:
+    matchLabels:
+      app: swarms-api
+  endpoints:
+  - port: http
+    path: /metrics
+    interval: 15s
