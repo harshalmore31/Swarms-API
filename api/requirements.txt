@@ -11,3 +11,4 @@ torch
 transformers
 pytz
 pydub
+litellm
