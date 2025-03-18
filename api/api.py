@@ -1,6 +1,7 @@
 import asyncio
 import os
 from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from decimal import Decimal
 from functools import lru_cache
@@ -24,11 +25,8 @@ from loguru import logger
 from pydantic import BaseModel, Field
 from swarms import Agent, SwarmRouter, SwarmType
 from swarms.structs import AgentsBuilder
-
-# from swarms.agents.reasoning_agents import OutputType, agent_types
-from swarms.utils.litellm_tokenizer import count_tokens
 from swarms.utils.any_to_str import any_to_str
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from swarms.utils.litellm_tokenizer import count_tokens
 
 load_dotenv()
 
@@ -962,7 +960,7 @@ async def auto_generate_agents(request: AutoGenerateAgentsSpec):
     return agents
 
 
-def get_swarm_types():
+async def get_swarm_types() -> List[str]:
     """Returns a list of available swarm types"""
     return [
         "AgentRearrange",
@@ -976,6 +974,8 @@ def get_swarm_types():
         "HiearchicalSwarm",
         "auto",
         "MajorityVoting",
+        "MALT",
+        "DeepResearchSwarm",
     ]
 
 
@@ -998,23 +998,21 @@ app.add_middleware(
 )
 
 
-@app.get("/", dependencies=[Depends(rate_limiter)])
+@app.get("/", dependencies=[Depends(rate_limiter), Depends(verify_api_key)])
 def root():
     return {
         "status": "Welcome to the Swarm API. Check out the docs at https://docs.swarms.world"
     }
 
 
-@app.get("/health", dependencies=[Depends(rate_limiter)])
+@app.get("/health", dependencies=[Depends(rate_limiter), Depends(verify_api_key)])
 def health():
     return {"status": "ok"}
 
 
 @app.get(
     "/v1/swarms/available",
-    dependencies=[
-        Depends(rate_limiter),
-    ],
+    dependencies=[Depends(rate_limiter), Depends(verify_api_key)],
 )
 async def check_swarm_types() -> List[str]:
     """
@@ -1066,37 +1064,46 @@ async def auto_generate_swarm(request: AutoGenerateAgentsSpec):
         Depends(rate_limiter),
     ],
 )
-async def run_batch_completions(
+def run_batch_completions(
     swarms: List[SwarmSpec], x_api_key=Header(...)
 ) -> List[Dict[str, Any]]:
     """
-    Run a batch of swarms with the specified tasks.
+    Run a batch of swarms with the specified tasks using a thread pool.
     """
     results = []
-    for swarm in swarms:
+
+    def process_swarm(swarm):
         try:
-            # Call the existing run_swarm function for each swarm
-            result = await run_swarm_completion(swarm, x_api_key)
-            results.append(result)
+            # Create and run the swarm directly
+            result = create_swarm(swarm, x_api_key)
+            return {"status": "success", "swarm_name": swarm.name, "result": result}
         except HTTPException as http_exc:
             logger.error("HTTPException occurred: {}", http_exc.detail)
-            results.append(
-                {
-                    "status": "error",
-                    "swarm_name": swarm.name,
-                    "detail": http_exc.detail,
-                }
-            )
+            return {
+                "status": "error",
+                "swarm_name": swarm.name,
+                "detail": http_exc.detail,
+            }
         except Exception as e:
             logger.error("Error running swarm {}: {}", swarm.name, str(e))
             logger.exception(e)
-            results.append(
-                {
-                    "status": "error",
-                    "swarm_name": swarm.name,
-                    "detail": f"Failed to run swarm: {str(e)}",
-                }
-            )
+            return {
+                "status": "error",
+                "swarm_name": swarm.name,
+                "detail": f"Failed to run swarm: {str(e)}",
+            }
+
+    # Use ThreadPoolExecutor for concurrent execution
+    with ThreadPoolExecutor(max_workers=min(len(swarms), 10)) as executor:
+        # Submit all swarms to the thread pool
+        future_to_swarm = {
+            executor.submit(process_swarm, swarm): swarm for swarm in swarms
+        }
+
+        # Collect results as they complete
+        for future in as_completed(future_to_swarm):
+            result = future.result()
+            results.append(result)
 
     return results
 
@@ -1112,9 +1119,7 @@ async def get_available_swarms(x_api_key: str = Header(...)) -> Dict[str, Any]:
     """
     Get all available swarms.
     """
-    available_swarms = await SwarmType
-    print(available_swarms)  # Print the list of available swarms
-    return available_swarms
+    return get_swarm_types()
 
 
 # Add this new endpoint

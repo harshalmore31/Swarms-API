@@ -20,13 +20,13 @@ def run_health_check():
 
 def run_single_swarm():
     payload = {
-        "name": "Financial Analysis Swarm",
-        "description": "Market analysis swarm",
+        "name": "Gold ETF Analysis Swarm",
+        "description": "Swarm for analyzing gold ETFs",
         "agents": [
             {
-                "agent_name": "Market Analyst",
-                "description": "Analyzes market trends",
-                "system_prompt": "You are a financial analyst expert.",
+                "agent_name": "Gold Market Analyst",
+                "description": "Analyzes trends in the gold market and ETFs related to gold.",
+                "system_prompt": "You are a financial analyst specializing in gold and gold ETFs.",
                 "model_name": "groq/deepseek-r1-distill-llama-70b",
                 "role": "worker",
                 "max_loops": 1,
@@ -36,9 +36,9 @@ def run_single_swarm():
                 "tools_dictionary": [],
             },
             {
-                "agent_name": "Economic Forecaster",
-                "description": "Predicts economic trends",
-                "system_prompt": "You are an expert in economic forecasting.",
+                "agent_name": "Gold Economic Forecaster",
+                "description": "Predicts economic trends affecting gold prices and ETFs.",
+                "system_prompt": "You are an expert in economic forecasting with a focus on gold.",
                 "model_name": "groq/deepseek-r1-distill-llama-70b",
                 "role": "worker",
                 "max_loops": 1,
@@ -50,18 +50,8 @@ def run_single_swarm():
         ],
         "max_loops": 1,
         "swarm_type": "ConcurrentWorkflow",
-        "task": "What are the best etfs and index funds for ai and tech?",
+        "task": "What are the best ETFs for investing in gold?",
         "output_type": "dict",
-        "messages": [
-            {
-                "role": "user",
-                "content": "What are the best etfs and index funds for ai and tech?",
-            },
-            {
-                "role": "Economic Forecaster",
-                "content": "Here are the best etfs and index funds for ai and tech:",
-            },
-        ],
     }
 
     response = requests.post(
