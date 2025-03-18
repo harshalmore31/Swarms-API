@@ -94,12 +94,9 @@ class AgentSpec(BaseModel):
     max_loops: Optional[int] = Field(
         description="The maximum number of times the agent is allowed to repeat its task, enabling iterative processing if necessary."
     )
-    # tools: Optional[List[Any]] = Field(
-    #     description="A list of tools that the agent can use to complete its task."
-    # )
-    # tools_dictionary: Optional[List[Dict[str, Any]]] = Field(
-    #     description="A dictionary of tools that the agent can use to complete its task."
-    # )
+    tools_dictionary: Optional[List[Dict[str, Any]]] = Field(
+        description="A dictionary of tools that the agent can use to complete its task."
+    )
 
 
 class Agents(BaseModel):
@@ -412,6 +409,12 @@ def create_single_agent(agent_spec: Union[AgentSpec, dict]) -> Agent:
             raise ValueError("Agent name is required.")
         if not agent_spec.model_name:
             raise ValueError("Model name is required.")
+        
+        
+        if agent_spec.tools_dictionary is not None:
+            tools_list_dictionary = agent_spec.tools_dictionary
+        else:
+            tools_list_dictionary = None
 
         # Create the agent
         agent = Agent(
@@ -425,6 +428,7 @@ def create_single_agent(agent_spec: Union[AgentSpec, dict]) -> Agent:
             role=agent_spec.role or "worker",
             max_loops=agent_spec.max_loops or 1,
             dynamic_temperature_enabled=True,
+            tools_list_dictionary=tools_list_dictionary,
         )
 
         logger.info("Successfully created agent: {}", agent_spec.agent_name)
@@ -998,14 +1002,14 @@ app.add_middleware(
 )
 
 
-@app.get("/", dependencies=[Depends(rate_limiter), Depends(verify_api_key)])
+@app.get("/")
 def root():
     return {
         "status": "Welcome to the Swarm API. Check out the docs at https://docs.swarms.world"
     }
 
 
-@app.get("/health", dependencies=[Depends(rate_limiter), Depends(verify_api_key)])
+@app.get("/health")
 def health():
     return {"status": "ok"}
 
