@@ -27,6 +27,7 @@ from swarms import Agent, SwarmRouter, SwarmType
 from swarms.structs import AgentsBuilder
 from swarms.utils.any_to_str import any_to_str
 from swarms.utils.litellm_tokenizer import count_tokens
+from litellm import model_list
 
 load_dotenv()
 
@@ -1146,6 +1147,20 @@ async def get_logs(x_api_key: str = Header(...)) -> Dict[str, Any]:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)
         )
+
+
+@app.get(
+    "/v1/models/available",
+    dependencies=[
+        Depends(verify_api_key),
+        Depends(rate_limiter),
+    ],
+)
+async def get_available_models() -> List[str]:
+    """
+    Get all available models.
+    """
+    return model_list
 
 
 @app.post(
