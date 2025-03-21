@@ -21,13 +21,13 @@ from fastapi import (
     status,
 )
 from fastapi.middleware.cors import CORSMiddleware
+from litellm import model_list
 from loguru import logger
 from pydantic import BaseModel, Field
 from swarms import Agent, SwarmRouter, SwarmType
 from swarms.structs import AgentsBuilder
 from swarms.utils.any_to_str import any_to_str
 from swarms.utils.litellm_tokenizer import count_tokens
-from litellm import model_list
 
 load_dotenv()
 
@@ -1022,7 +1022,12 @@ async def check_swarm_types() -> List[str]:
     """
     Check the available swarm types.
     """
-    return get_swarm_types()
+    out = {
+        "success": True,
+        "swarm_types": get_swarm_types(),
+    }
+    
+    return out
 
 
 @app.post(
@@ -1159,7 +1164,11 @@ async def get_available_models() -> List[str]:
     """
     Get all available models.
     """
-    return model_list
+    out = {
+        "success": True,
+        "models": model_list,
+    }
+    return out
 
 
 @app.post(

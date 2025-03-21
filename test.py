@@ -8,7 +8,7 @@ import json
 load_dotenv()
 
 API_KEY = os.getenv("SWARMS_API_KEY")
-BASE_URL = "https://api.swarms.world"
+BASE_URL = "https://swarms-api-285321057562.us-east1.run.app"
 
 headers = {"x-api-key": API_KEY, "Content-Type": "application/json"}
 
@@ -27,13 +27,12 @@ def run_single_swarm():
                 "agent_name": "Gold Market Analyst",
                 "description": "Analyzes trends in the gold market and ETFs related to gold.",
                 "system_prompt": "You are a financial analyst specializing in gold and gold ETFs.",
-                "model_name": "openai/gpt-4o",
+                "model_name": "claude-3-7-sonnet-latest",
                 "role": "worker",
                 "max_loops": 1,
                 "max_tokens": 8192,
                 "temperature": 0.5,
                 "auto_generate_prompt": False,
-                "tools_dictionary": [],
             },
             {
                 "agent_name": "Gold Economic Forecaster",
@@ -45,7 +44,6 @@ def run_single_swarm():
                 "max_tokens": 8192,
                 "temperature": 0.5,
                 "auto_generate_prompt": False,
-                "tools_dictionary": [],
             },
         ],
         "max_loops": 1,
