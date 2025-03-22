@@ -969,7 +969,7 @@ def health():
     "/v1/swarms/available",
     dependencies=[Depends(rate_limiter), Depends(verify_api_key)],
 )
-async def check_swarm_types() -> List[str]:
+async def check_swarm_types(x_api_key_key=Header(...)) -> List[str]:
     """
     Check the available swarm types.
     """
@@ -993,28 +993,6 @@ async def run_swarm(swarm: SwarmSpec, x_api_key=Header(...)) -> Dict[str, Any]:
     Run a swarm with the specified task.
     """
     return await run_swarm_completion(swarm, x_api_key)
-
-
-@app.post(
-    "/v1/agents/auto-generate",
-    dependencies=[Depends(verify_api_key), Depends(rate_limiter)],
-)
-async def auto_generate_swarm(request: AutoGenerateAgentsSpec):
-    """
-    Automatically generate a swarm for a given task.
-    """
-    return await auto_generate_agents(request)
-
-
-# @app.post(
-#     "/v1/agent/completions",
-#     dependencies=[Depends(verify_api_key), Depends(rate_limiter)],
-# )
-# def run_agent(agent: ReasoningAgentSpec, x_api_key=Header(...)) -> Dict[str, Any]:
-#     """
-#     Run an agent with the specified task.
-#     """
-#     return create_reasoning_agent(agent, x_api_key)
 
 
 @app.post(
@@ -1066,20 +1044,6 @@ def run_batch_completions(
             results.append(result)
 
     return results
-
-
-@app.get(
-    "/v1/swarms/available",
-    dependencies=[
-        Depends(verify_api_key),
-        Depends(rate_limiter),
-    ],
-)
-async def get_available_swarms(x_api_key: str = Header(...)) -> Dict[str, Any]:
-    """
-    Get all available swarms.
-    """
-    return get_swarm_types()
 
 
 # Add this new endpoint
