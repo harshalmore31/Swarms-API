@@ -62,6 +62,41 @@ def rate_limiter(request: Request):
         )
 
 
+class MCPConfig(BaseModel):
+    """
+    Configuration for a single MCP (Model Configuration Parameter).
+
+    Attributes:
+        url (Optional[str]): The endpoint URL for the MCP.
+        parameters (Dict[str, Any]): A dictionary of parameters to be passed to the MCP.
+        types (str): The type of the MCP, indicating its functionality or category.
+        docs (str): Documentation or description of the MCP's purpose and usage.
+    """
+
+    url: Optional[str] = Field(None, description="The endpoint URL for the MCP.")
+    parameters: Dict[str, Any] = Field(
+        ..., description="A dictionary of parameters to be passed to the MCP."
+    )
+    types: str = Field(
+        ...,
+        description="The type of the MCP, indicating its functionality or category.",
+    )
+    docs: str = Field(
+        ..., description="Documentation or description of the MCP's purpose and usage."
+    )
+
+
+class MultipleMCPConfig(BaseModel):
+    """
+    Configuration for multiple MCPs (Model Configuration Parameters).
+
+    Attributes:
+        mcps_list (List[MCPConfig]): A list of MCP configurations.
+    """
+
+    mcps_list: List[MCPConfig] = Field(..., description="A list of MCP configurations.")
+
+
 class AgentSpec(BaseModel):
     agent_name: Optional[str] = Field(
         None,
@@ -1026,7 +1061,7 @@ async def check_swarm_types() -> List[str]:
         "success": True,
         "swarm_types": get_swarm_types(),
     }
-    
+
     return out
 
 
