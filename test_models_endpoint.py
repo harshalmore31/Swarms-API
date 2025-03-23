@@ -13,7 +13,7 @@ headers = {"x-api-key": API_KEY, "Content-Type": "application/json"}
 
 
 def get_models():
-    response = requests.get(f"{BASE_URL}/v1/swarms/available", headers=headers)
+    response = requests.get(f"{BASE_URL}/v1/models/available", headers=headers)
     return response
 
 

@@ -969,7 +969,7 @@ def health():
     "/v1/swarms/available",
     dependencies=[Depends(rate_limiter)],
 )
-async def check_swarm_types() -> List[str]:
+async def check_swarm_types() -> Dict[str, Any]:
     """
     Check the available swarm types.
     """
@@ -1074,7 +1074,7 @@ async def get_logs(x_api_key: str = Header(...)) -> Dict[str, Any]:
         Depends(rate_limiter),
     ],
 )
-async def get_available_models():
+async def get_available_models() -> Dict[str, Any]:
     """
     Get all available models.
     """
