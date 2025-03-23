@@ -5,6 +5,7 @@ import requests
 from dotenv import load_dotenv
 import json
 
+
 load_dotenv()
 
 API_KEY = os.getenv("SWARMS_API_KEY")
