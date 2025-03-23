@@ -967,7 +967,7 @@ def health():
 
 @app.get(
     "/v1/swarms/available",
-    dependencies=[Depends(rate_limiter), Depends(verify_api_key)],
+    dependencies=[Depends(rate_limiter)],
 )
 async def check_swarm_types() -> List[str]:
     """
@@ -1071,7 +1071,6 @@ async def get_logs(x_api_key: str = Header(...)) -> Dict[str, Any]:
 @app.get(
     "/v1/models/available",
     dependencies=[
-        Depends(verify_api_key),
         Depends(rate_limiter),
     ],
 )
