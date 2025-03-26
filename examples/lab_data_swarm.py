@@ -5,15 +5,17 @@ import requests
 from dotenv import load_dotenv
 import json
 
-
 load_dotenv()
 
 API_KEY = os.getenv("SWARMS_API_KEY")
-# BASE_URL = "https://swarms-api-285321057562.us-east1.run.app"
-BASE_URL = "https://api.swarms.world"
+BASE_URL = "https://swarms-api-285321057562.us-east1.run.app"
+# BASE_URL = "https://api.swarms.world"
 
 headers = {"x-api-key": API_KEY, "Content-Type": "application/json"}
 
+
+def open_csv(data):
+    pass
 
 def run_health_check():
     response = requests.get(f"{BASE_URL}/health", headers=headers)
@@ -60,7 +62,7 @@ def run_single_swarm():
             },
         ],
         "max_loops": 1,
-        "swarm_type": "SequentialWorkflow",
+        "swarm_type": "ConcurrentWorkflow",
         "task": "Analyze the following lab report data and provide ICD-10 diagnoses: Patient: 45-year-old White Male, Location: New York, NY, Lab Results: - egfr - 59 ml / min / 1.73 - non african-american",
         "output_type": "dict",
     }
@@ -84,7 +86,6 @@ def get_logs():
     output = response.json()
     # return json.dumps(output, indent=4)
     return output
-
 
 
 if __name__ == "__main__":

@@ -40,6 +40,7 @@ docker-deploy.sh
 
 # Installer logs
 pip-log.txt
+secret
 pip-delete-this-directory.txt
 
 # Unit test / coverage reports

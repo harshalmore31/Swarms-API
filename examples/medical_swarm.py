@@ -5,11 +5,12 @@ import requests
 from dotenv import load_dotenv
 import json
 
+
 load_dotenv()
 
 API_KEY = os.getenv("SWARMS_API_KEY")
-BASE_URL = "https://swarms-api-285321057562.us-east1.run.app"
-# BASE_URL = "https://api.swarms.world"
+# BASE_URL = "https://swarms-api-285321057562.us-east1.run.app"
+BASE_URL = "https://api.swarms.world"
 
 headers = {"x-api-key": API_KEY, "Content-Type": "application/json"}
 
@@ -28,7 +29,7 @@ def run_single_swarm():
                 "agent_name": "Lab Data Analyzer",
                 "description": "Analyzes lab report data to extract relevant medical information.",
                 "system_prompt": "You are a medical data analyst specializing in interpreting lab results for diagnosis.",
-                "model_name": "gpt-4o",
+                "model_name": "anthropic/claude-3-5-sonnet-latest",
                 "role": "worker",
                 "max_loops": 1,
                 "max_tokens": 8192,

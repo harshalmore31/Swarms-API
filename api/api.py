@@ -1,5 +1,3 @@
-
-
 import asyncio
 import os
 from collections import defaultdict
@@ -26,8 +24,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from litellm import model_list
 from loguru import logger
 from pydantic import BaseModel, Field
-from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.requests import Request
 from swarms import Agent, SwarmRouter, SwarmType
 from swarms.structs import AgentsBuilder
 from swarms.utils.any_to_str import any_to_str
@@ -46,21 +42,6 @@ request_counts = defaultdict(lambda: {"count": 0, "start_time": time()})
 scheduled_jobs: Dict[str, Dict] = {}
 
 app = FastAPI()
-
-class SecurityHeadersMiddleware(BaseHTTPMiddleware):
-    async def dispatch(self, request: Request, call_next):
-        response = await call_next(request)
-        
-        # Add security headers appropriate for an API
-        response.headers["X-Content-Type-Options"] = "nosniff"
-        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
-        
-        # Omit headers that could interfere with API consumption
-        # response.headers["X-Frame-Options"] = "DENY"
-        # response.headers["X-XSS-Protection"] = "1; mode=block"
-        # response.headers["Content-Security-Policy"] = "default-src 'self'"
-        
-        return response
 
 
 def rate_limiter(request: Request):
@@ -972,9 +953,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-app.add_middleware(SecurityHeadersMiddleware)
-
 
 
 @app.get("/")

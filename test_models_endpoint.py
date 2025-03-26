@@ -22,4 +22,3 @@ if __name__ == "__main__":
     result = get_models()
     print("Models Result:")
     print(result)
-
