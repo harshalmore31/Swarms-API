@@ -156,44 +156,6 @@ class ScheduleSpec(BaseModel):
     )
 
 
-# class ReasoningAgentSpec(BaseModel):
-#     agent_name: str = Field(
-#         "reasoning_agent",
-#         description="The name of the reasoning agent, which identifies its role and functionality within the swarm.",
-#     )
-#     description: str = Field(
-#         "A reasoning agent that can answer questions and help with tasks.",
-#         description="A detailed explanation of the agent's purpose, capabilities, and any specific tasks it is designed to perform.",
-#     )
-#     model_name: str = Field(
-#         "gpt-4o-mini",
-#         description="The name of the AI model that the agent will utilize for processing tasks and generating outputs. For example: gpt-4o, gpt-4o-mini, openai/o3-mini",
-#     )
-#     system_prompt: str = Field(
-#         "You are a helpful assistant that can answer questions and help with tasks.",
-#         description="The initial instruction or context provided to the agent, guiding its behavior and responses during execution.",
-#     )
-#     max_loops: int = Field(
-#         1,
-#         description="The maximum number of times the agent is allowed to repeat its task, enabling iterative processing if necessary.",
-#     )
-#     swarm_type: agent_types = Field(
-#         "reasoning_duo",
-#         description="The type of reasoning swarm to use (e.g., reasoning duo, self-consistency, IRE).",
-#     )
-#     num_samples: int = Field(
-#         1, description="The number of samples to generate for self-consistency agents."
-#     )
-#     output_type: OutputType = Field(
-#         "dict", description="The format of the output (e.g., dict, list)."
-#     )
-
-#     task: str = Field(
-#         None,
-#         description="The specific task or objective that the swarm is designed to accomplish.",
-#     )
-
-
 class SwarmSpec(BaseModel):
     name: Optional[str] = Field(
         None,
