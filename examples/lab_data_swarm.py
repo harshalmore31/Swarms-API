@@ -17,6 +17,7 @@ headers = {"x-api-key": API_KEY, "Content-Type": "application/json"}
 def open_csv(data):
     pass
 
+
 def run_health_check():
     response = requests.get(f"{BASE_URL}/health", headers=headers)
     return response.json()

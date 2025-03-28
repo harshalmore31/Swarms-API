@@ -8,6 +8,7 @@ from functools import lru_cache
 from threading import Thread
 from time import sleep, time
 from typing import Any, Dict, List, Optional, Union
+from uuid import uuid4
 
 import pytz
 import supabase
@@ -101,36 +102,37 @@ class MultipleMCPConfig(BaseModel):
 
 class AgentSpec(BaseModel):
     agent_name: Optional[str] = Field(
-        None,
         description="The unique name assigned to the agent, which identifies its role and functionality within the swarm.",
     )
     description: Optional[str] = Field(
-        None,
         description="A detailed explanation of the agent's purpose, capabilities, and any specific tasks it is designed to perform.",
     )
     system_prompt: Optional[str] = Field(
-        None,
         description="The initial instruction or context provided to the agent, guiding its behavior and responses during execution.",
     )
     model_name: Optional[str] = Field(
-        description="The name of the AI model that the agent will utilize for processing tasks and generating outputs. For example: gpt-4o, gpt-4o-mini, openai/o3-mini"
+        default="gpt-4o-mini",
+        description="The name of the AI model that the agent will utilize for processing tasks and generating outputs. For example: gpt-4o, gpt-4o-mini, openai/o3-mini",
     )
     auto_generate_prompt: Optional[bool] = Field(
         default=False,
         description="A flag indicating whether the agent should automatically create prompts based on the task requirements.",
     )
     max_tokens: Optional[int] = Field(
-        None,
+        default=8192,
         description="The maximum number of tokens that the agent is allowed to generate in its responses, limiting output length.",
     )
     temperature: Optional[float] = Field(
-        description="A parameter that controls the randomness of the agent's output; lower values result in more deterministic responses."
+        default=0.5,
+        description="A parameter that controls the randomness of the agent's output; lower values result in more deterministic responses.",
     )
     role: Optional[str] = Field(
-        description="The designated role of the agent within the swarm, which influences its behavior and interaction with other agents."
+        default="worker",
+        description="The designated role of the agent within the swarm, which influences its behavior and interaction with other agents.",
     )
     max_loops: Optional[int] = Field(
-        description="The maximum number of times the agent is allowed to repeat its task, enabling iterative processing if necessary."
+        default=1,
+        description="The maximum number of times the agent is allowed to repeat its task, enabling iterative processing if necessary.",
     )
     # tools_dictionary: Optional[List[Dict[str, Any]]] = Field(
     #     description="A dictionary of tools that the agent can use to complete its task."
@@ -171,7 +173,7 @@ class SwarmSpec(BaseModel):
         description="A list of agents or specifications that define the agents participating in the swarm.",
     )
     max_loops: Optional[int] = Field(
-        None,
+        default=1,
         description="The maximum number of execution loops allowed for the swarm, enabling repeated processing if needed.",
     )
     swarm_type: Optional[SwarmType] = Field(
@@ -210,6 +212,39 @@ class SwarmSpec(BaseModel):
         None,
         description="A list of messages that the swarm should complete.",
     )
+    # rag_on: Optional[bool] = Field(
+    #     None,
+    #     description="A flag indicating whether the swarm should use RAG.",
+    # )
+    # collection_name: Optional[str] = Field(
+    #     None,
+    #     description="The name of the collection to use for RAG.",
+    # )
+
+
+class MarketplaceSwarmMetadata(BaseModel):
+    """Metadata for a marketplace swarm listing"""
+
+    name: str = Field(..., description="Unique name of the swarm")
+    description: str = Field(..., description="Description of what the swarm does")
+    creator_id: str = Field(
+        default_factory=lambda: str(uuid4()),
+        description="ID of the user who created the swarm",
+    )
+    tags: List[str] = Field(default=[], description="Tags to categorize the swarm")
+    price: Decimal = Field(..., description="Price in credits to run the swarm")
+    version: str = Field(default="1.0.0", description="Version of the swarm")
+    created_at: str = Field(default_factory=lambda: datetime.now().isoformat())
+    updated_at: str = Field(default_factory=lambda: datetime.now().isoformat())
+    is_public: bool = Field(
+        default=True, description="Whether the swarm is publicly available"
+    )
+
+
+class MarketplaceSwarmComplete(MarketplaceSwarmMetadata):
+    """Complete marketplace swarm including the actual swarm spec"""
+
+    swarm_spec: SwarmSpec = Field(..., description="The actual swarm specification")
 
 
 class AutoGenerateAgentsSpec(BaseModel):
@@ -1008,6 +1043,43 @@ def run_batch_completions(
             results.append(result)
 
     return results
+
+
+# @app.post(
+#     "/v1/swarms/marketplace/publish",
+#     dependencies=[
+#         Depends(verify_api_key),
+#         Depends(rate_limiter),
+#     ],
+# )
+# async def publish_marketplace_swarm(
+#     swarm: MarketplaceSwarmComplete, x_api_key: str = Header(...)
+# ) -> Dict[str, Any]:
+#     """
+#     Publish a swarm to the marketplace.
+#     """
+#     try:
+
+#         # Set the creator ID
+#         swarm.creator_id = str(uuid.uuid4())
+
+#         await log_api_request(
+#             x_api_key,
+#             {"action": "publish_marketplace_swarm", "swarm_config": swarm.model_dump()},
+#         )
+
+#         return {
+#             "status": "success",
+#             "message": "Swarm published successfully",
+#             "swarm": swarm.model_dump(),
+#         }
+
+#     except Exception as e:
+#         logger.error(f"Error publishing marketplace swarm: {str(e)}")
+#         raise HTTPException(
+#             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+#             detail=f"Failed to publish swarm: {str(e)}",
+#         )
 
 
 # Add this new endpoint
