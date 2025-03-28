@@ -383,40 +383,23 @@ def validate_swarm_spec(swarm_spec: SwarmSpec) -> tuple[str, Optional[List[str]]
     Raises:
         HTTPException: If validation fails
     """
-    # Check for required task field
-    if swarm_spec.task is None and swarm_spec.tasks is None:
-        logger.error("Swarm creation failed: 'task' field is missing.")
+
+    if (
+        swarm_spec.task is None
+        and swarm_spec.tasks is None
+        and swarm_spec.messages is None
+    ):
         raise HTTPException(
             status_code=400,
-            detail="The 'task' field is mandatory for swarm creation. Please provide a valid task description to proceed.",
+            detail="There is no task or tasks or messages provided. Please provide a valid task description to proceed.",
         )
 
-    # Determine task(s) to execute
-    task = None
-    tasks = None
     if swarm_spec.task is not None:
         task = swarm_spec.task
-    else:
-        tasks = swarm_spec.tasks
-
-    # Check for agents if required
-    if (
-        swarm_spec.swarm_type != "MALT"
-        and swarm_spec.swarm_type != "DeepResearchSwarm"
-        and (not swarm_spec.agents or len(swarm_spec.agents) == 0)
-    ):
-        logger.info(
-            "No agents specified. Auto-creating agents for task: {}",
-            swarm_spec.task,
-        )
-        raise HTTPException(
-            status_code=400,
-            detail=f"No agents specified. Auto-creating agents for task: {swarm_spec.task}",
-        )
-
-    # Handle messages if present
-    if swarm_spec.messages is not None:
+    elif swarm_spec.messages is not None:
         task = any_to_str(swarm_spec.messages)
+    elif swarm_spec.tasks is not None:
+        tasks = swarm_spec.tasks
 
     return task, tasks
 
