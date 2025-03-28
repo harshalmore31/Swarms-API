@@ -454,6 +454,9 @@ def validate_swarm_spec(swarm_spec: SwarmSpec) -> tuple[str, Optional[List[str]]
     Raises:
         HTTPException: If validation fails
     """
+    
+    task = None
+    tasks = None
 
     if (
         swarm_spec.task is None
@@ -465,8 +468,6 @@ def validate_swarm_spec(swarm_spec: SwarmSpec) -> tuple[str, Optional[List[str]]
             detail="There is no task or tasks or messages provided. Please provide a valid task description to proceed.",
         )
 
-    task = None
-    tasks = None
 
     if swarm_spec.task is not None:
         task = swarm_spec.task
