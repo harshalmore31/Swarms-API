@@ -1,5 +1,8 @@
 import asyncio
+import json
 import os
+import platform
+import socket
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
@@ -7,9 +10,19 @@ from decimal import Decimal
 from functools import lru_cache
 from threading import Thread
 from time import sleep, time
-from typing import Any, Dict, List, Optional, Union
+from typing import (
+    Any,
+    AsyncGenerator,
+    Awaitable,
+    Callable,
+    Dict,
+    List,
+    Optional,
+    Union,
+)
 from uuid import uuid4
 
+import psutil
 import pytz
 import supabase
 from dotenv import load_dotenv
@@ -22,6 +35,7 @@ from fastapi import (
     status,
 )
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from litellm import model_list
 from loguru import logger
 from pydantic import BaseModel, Field
@@ -29,9 +43,41 @@ from swarms import Agent, SwarmRouter, SwarmType
 from swarms.structs import AgentsBuilder
 from swarms.utils.any_to_str import any_to_str
 from swarms.utils.litellm_tokenizer import count_tokens
-import platform
-import socket
-import psutil
+
+
+# --- Async generator to stream a dictionary as NDJSON ---
+async def async_stream_dict(data: Dict[str, Any], delay: float = 0.0) -> AsyncGenerator[str, None]:
+    for key, value in data.items():
+        if delay:
+            await asyncio.sleep(delay)  # Optional delay per key
+        yield json.dumps({key: value}) + "\n"
+
+
+# --- Function to streamify any async function that returns a dict ---
+def async_streamify_dict(
+    fn: Callable[..., Awaitable[Dict[str, Any]]],
+    *args,
+    delay: float = 0.0,
+    **kwargs
+) -> StreamingResponse:
+    """
+    Call an async function that returns a dict and stream it as NDJSON.
+    
+    Args:
+        fn: An async function returning a dictionary.
+        delay: Optional delay between streamed items.
+        *args/**kwargs: Arguments passed to the function.
+    
+    Returns:
+        StreamingResponse with NDJSON.
+    """
+    async def generator():
+        data = await fn(*args, **kwargs)
+        async for chunk in async_stream_dict(data, delay):
+            yield chunk
+
+    return StreamingResponse(generator(), media_type="application/x-ndjson")
+
 
 
 load_dotenv()
@@ -224,6 +270,10 @@ class SwarmSpec(BaseModel):
     #     None,
     #     description="The name of the collection to use for RAG.",
     # )
+    stream: Optional[bool] = Field(
+        False,
+        description="A flag indicating whether the swarm should stream its output.",
+    )
 
 
 class MarketplaceSwarmMetadata(BaseModel):
@@ -1145,7 +1195,12 @@ async def run_swarm(swarm: SwarmSpec, x_api_key=Header(...)) -> Dict[str, Any]:
     """
     Run a swarm with the specified task.
     """
-    return await run_swarm_completion(swarm, x_api_key)
+    # return await run_swarm_completion(swarm, x_api_key)
+    
+    if swarm.stream is True:
+        return async_streamify_dict(run_swarm_completion)(swarm, x_api_key)
+    else:
+        return await run_swarm_completion(swarm, x_api_key)
 
 
 @app.post(
