@@ -536,7 +536,13 @@ def create_swarm(swarm_spec: SwarmSpec, api_key: str):
         start_time = time()
 
         # Run the swarm task
-        if tasks is not None:
+        # if tasks is not None:
+        #     output = swarm.batch_run(tasks=tasks)
+        # else:
+        #     output = swarm.run(task=task)
+        if task is not None:
+            output = swarm.run(task=task)
+        elif tasks is not None:
             output = swarm.batch_run(tasks=tasks)
         else:
             output = swarm.run(task=task)
