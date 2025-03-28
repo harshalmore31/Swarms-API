@@ -29,6 +29,10 @@ from swarms import Agent, SwarmRouter, SwarmType
 from swarms.structs import AgentsBuilder
 from swarms.utils.any_to_str import any_to_str
 from swarms.utils.litellm_tokenizer import count_tokens
+import platform
+import socket
+import psutil
+
 
 load_dotenv()
 
@@ -284,6 +288,73 @@ class ScheduledJob(Thread):
             sleep(1)  # Check every second
 
 
+async def capture_telemetry(request: Request) -> Dict[str, Any]:
+    """
+    Captures comprehensive telemetry data from incoming requests including:
+    - Request metadata (method, path, headers)
+    - Client information (IP, user agent string)
+    - Server information (hostname, platform)
+    - System metrics (CPU, memory)
+    - Timing data
+
+    Args:
+        request (Request): The FastAPI request object
+
+    Returns:
+        Dict[str, Any]: Dictionary containing telemetry data
+    """
+    try:
+        # Get request headers
+        headers = dict(request.headers)
+        user_agent_string = headers.get("user-agent", "")
+
+        # Get client IP, handling potential proxies
+        client_ip = request.client.host
+        forwarded_for = headers.get("x-forwarded-for")
+        if forwarded_for:
+            client_ip = forwarded_for.split(",")[0]
+
+        # Basic system metrics
+        cpu_percent = psutil.cpu_percent()
+        memory = psutil.virtual_memory()
+
+        telemetry = {
+            "request_id": str(uuid4()),
+            "timestamp": datetime.utcnow().isoformat(),
+            # Request data
+            "method": request.method,
+            "path": str(request.url.path),
+            "query_params": dict(request.query_params),
+            "client_ip": client_ip,
+            # Headers and user agent info
+            "headers": headers,
+            "user_agent": user_agent_string,
+            # Server information
+            "server": {
+                "hostname": socket.gethostname(),
+                "platform": platform.platform(),
+                "python_version": platform.python_version(),
+                "processor": platform.processor() or "unknown",
+            },
+            # System metrics
+            "system_metrics": {
+                "cpu_percent": cpu_percent,
+                "memory_total": memory.total,
+                "memory_available": memory.available,
+                "memory_percent": memory.percent,
+            },
+        }
+
+        return telemetry
+
+    except Exception as e:
+        logger.error(f"Error capturing telemetry: {str(e)}")
+        return {
+            "error": "Failed to capture complete telemetry",
+            "timestamp": datetime.utcnow().isoformat(),
+        }
+
+
 @lru_cache(maxsize=1)
 def get_supabase_client():
     supabase_url = os.getenv("SUPABASE_URL")
@@ -393,7 +464,7 @@ def validate_swarm_spec(swarm_spec: SwarmSpec) -> tuple[str, Optional[List[str]]
             status_code=400,
             detail="There is no task or tasks or messages provided. Please provide a valid task description to proceed.",
         )
-        
+
     task = None
     tasks = None
 
@@ -488,6 +559,7 @@ def create_swarm(swarm_spec: SwarmSpec, api_key: str):
     """
     try:
         # Validate the swarm spec
+
         task, tasks = validate_swarm_spec(swarm_spec)
 
         # Create agents in parallel if specified
@@ -949,6 +1021,94 @@ def root():
     return {
         "status": "Welcome to the Swarm API. Check out the docs at https://docs.swarms.world"
     }
+
+
+@app.middleware("http")
+async def telemetry_middleware(request: Request, call_next):
+    """
+    Middleware to capture telemetry for all requests and log to database
+    """
+    start_time = time()
+
+    # Capture initial telemetry
+    telemetry = await capture_telemetry(request)
+
+    # Add request start time
+    telemetry["request_timing"] = {
+        "start_time": start_time,
+        "start_timestamp": datetime.utcnow().isoformat(),
+    }
+
+    # Store telemetry in request state for access in route handlers
+    request.state.telemetry = telemetry
+
+    try:
+        # Process the request
+        response = await call_next(request)
+
+        # Calculate request duration
+        duration = time() - start_time
+
+        # Update telemetry with response data
+        telemetry.update(
+            {
+                "response": {
+                    "status_code": response.status_code,
+                    "duration_seconds": duration,
+                }
+            }
+        )
+
+        # Try to get API key from headers
+        api_key = request.headers.get("x-api-key")
+
+        # Log telemetry to database if we have an API key
+        if api_key:
+            try:
+                await log_api_request(
+                    api_key,
+                    {
+                        "telemetry": telemetry,
+                        "path": str(request.url.path),
+                        "method": request.method,
+                        "timestamp": datetime.utcnow().isoformat(),
+                    },
+                )
+            except Exception as e:
+                logger.error(f"Failed to log telemetry to database: {str(e)}")
+
+        return response
+
+    except Exception as e:
+        # Update telemetry with error information
+        telemetry.update(
+            {
+                "error": {
+                    "type": type(e).__name__,
+                    "message": str(e),
+                    "duration_seconds": time() - start_time,
+                }
+            }
+        )
+
+        # Try to log error telemetry if we have an API key
+        api_key = request.headers.get("x-api-key")
+        if api_key:
+            try:
+                await log_api_request(
+                    api_key,
+                    {
+                        "telemetry": telemetry,
+                        "path": str(request.url.path),
+                        "method": request.method,
+                        "timestamp": datetime.utcnow().isoformat(),
+                        "error": True,
+                    },
+                )
+            except Exception as log_error:
+                logger.error(f"Failed to log error telemetry: {str(log_error)}")
+
+        raise  # Re-raise the original exception
 
 
 @app.get("/health")

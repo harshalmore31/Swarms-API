@@ -1,7 +1,7 @@
 import requests
 import json
 import time
-from datetime import datetime, timedelta
+from datetime import datetime
 from loguru import logger
 import os
 from typing import Any
