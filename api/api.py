@@ -535,11 +535,6 @@ def create_swarm(swarm_spec: SwarmSpec, api_key: str):
         # Calculate costs and execute
         start_time = time()
 
-        # Run the swarm task
-        # if tasks is not None:
-        #     output = swarm.batch_run(tasks=tasks)
-        # else:
-        #     output = swarm.run(task=task)
         if task is not None:
             output = swarm.run(task=task)
         elif tasks is not None:
@@ -648,12 +643,17 @@ async def run_swarm_completion(
             "description": swarm.description,
             "swarm_type": swarm.swarm_type,
             "task": swarm.task,
-            "tasks": swarm.tasks,
-            "messages": swarm.messages,
             "output": result,
             "number_of_agents": length_of_agents,
             # "input_config": swarm.model_dump(),
         }
+
+        if swarm.tasks is not None:
+            response["tasks"] = swarm.tasks
+
+        if swarm.messages is not None:
+            response["messages"] = swarm.messages
+
         logger.info(response)
         await log_api_request(x_api_key, response)
 
