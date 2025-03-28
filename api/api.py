@@ -473,7 +473,7 @@ def validate_swarm_spec(swarm_spec: SwarmSpec) -> tuple[str, Optional[List[str]]
     elif swarm_spec.messages is not None:
         task = any_to_str(swarm_spec.messages)
     elif swarm_spec.task and swarm_spec.messages is not None:
-        task = f"{any_to_str(swarm_spec.messages)} \n\n {swarm_spec.task}"
+        task = f"{any_to_str(swarm_spec.messages)} \n\n User: {swarm_spec.task}"
     elif swarm_spec.tasks is not None:
         tasks = swarm_spec.tasks
 
