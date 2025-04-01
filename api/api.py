@@ -46,7 +46,9 @@ from swarms.utils.litellm_tokenizer import count_tokens
 
 
 # --- Async generator to stream a dictionary as NDJSON ---
-async def async_stream_dict(data: Dict[str, Any], delay: float = 0.0) -> AsyncGenerator[str, None]:
+async def async_stream_dict(
+    data: Dict[str, Any], delay: float = 0.0
+) -> AsyncGenerator[str, None]:
     for key, value in data.items():
         if delay:
             await asyncio.sleep(delay)  # Optional delay per key
@@ -55,29 +57,26 @@ async def async_stream_dict(data: Dict[str, Any], delay: float = 0.0) -> AsyncGe
 
 # --- Function to streamify any async function that returns a dict ---
 def async_streamify_dict(
-    fn: Callable[..., Awaitable[Dict[str, Any]]],
-    *args,
-    delay: float = 0.0,
-    **kwargs
+    fn: Callable[..., Awaitable[Dict[str, Any]]], *args, delay: float = 0.0, **kwargs
 ) -> StreamingResponse:
     """
     Call an async function that returns a dict and stream it as NDJSON.
-    
+
     Args:
         fn: An async function returning a dictionary.
         delay: Optional delay between streamed items.
         *args/**kwargs: Arguments passed to the function.
-    
+
     Returns:
         StreamingResponse with NDJSON.
     """
+
     async def generator():
         data = await fn(*args, **kwargs)
         async for chunk in async_stream_dict(data, delay):
             yield chunk
 
     return StreamingResponse(generator(), media_type="application/x-ndjson")
-
 
 
 load_dotenv()
@@ -769,7 +768,7 @@ async def run_swarm_completion(
             "swarm_name": swarm_name,
             "description": swarm.description,
             "swarm_type": swarm.swarm_type,
-            "task": swarm.task,
+            # "task": swarm.task,
             "output": result,
             "number_of_agents": length_of_agents,
             # "input_config": swarm.model_dump(),
@@ -833,7 +832,7 @@ def deduct_credits(api_key: str, amount: float, product_name: str) -> None:
     if (available_credit + free_credit) < deduction:
         raise HTTPException(
             status_code=status.HTTP_402_PAYMENT_REQUIRED,
-            detail="Insufficient credits.",
+            detail="Insufficient credits. Fill your credit card in the dashboard at https://swarms.world/platform/account",
         )
 
     # 3. Log the transaction
@@ -1196,7 +1195,7 @@ async def run_swarm(swarm: SwarmSpec, x_api_key=Header(...)) -> Dict[str, Any]:
     Run a swarm with the specified task.
     """
     # return await run_swarm_completion(swarm, x_api_key)
-    
+
     if swarm.stream is True:
         return async_streamify_dict(run_swarm_completion)(swarm, x_api_key)
     else:

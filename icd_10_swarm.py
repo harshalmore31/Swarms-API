@@ -34,89 +34,85 @@ def create_icd10_coding_swarm(clinical_documentation):
     Returns:
         dict: The swarm execution result containing ICD-10 codes with justifications.
     """
+
     # Define specialized prompts for medical coding
-    DOCUMENTATION_ANALYZER_PROMPT = """
-    You are a clinical documentation specialist. Your role is to carefully analyze medical documentation to identify all documented medical conditions, procedures, and relevant clinical factors.
+    CODE_EXTRACTOR_PROMPT = """
+    You are a precise ICD-10 code extractor. Your sole purpose is to identify and list ICD-10 codes from clinical documentation.
 
-    Your tasks include:
-    1. Identifying all medical conditions explicitly stated in the documentation
-    2. Noting the specificity of each documented condition (e.g., type, acuity, severity, etiology)
-    3. Identifying any documented causal relationships between conditions
-    4. Recognizing documented complications and manifestations
-    5. Distinguishing between confirmed diagnoses and suspected/ruled-out conditions
-    6. Identifying any documented procedures or interventions
+    Your tasks:
+    1. Extract ONLY the ICD-10 codes from the clinical documentation
+    2. List them in order of importance (principal diagnosis first)
+    3. Do not include any explanations or justifications
+    4. Format the output as a clean list of codes
 
-    When analyzing documentation:
-    - Focus only on explicitly documented conditions (do not infer diagnoses)
-    - Note when documentation lacks necessary specificity for precise coding
-    - Identify clinical indicators and findings that support documented diagnoses
-    - Organize conditions by system or by primary/secondary status
-    - Highlight any areas where provider clarification might be needed
+    Rules:
+    - Only include codes that are explicitly supported by the documentation
+    - Use the most specific code available
+    - Follow proper code sequencing guidelines
+    - Do not infer or assume conditions not stated
+    - Format output as a simple list of codes, one per line
     """
 
-    ICD10_CODER_PROMPT = """
-    You are an expert medical coder with extensive experience in ICD-10-CM and ICD-10-PCS coding.
-    Your responsibility is to translate clinical documentation into accurate diagnostic and procedural codes.
+    CODE_EXPLAINER_PROMPT = """
+    You are an expert ICD-10 code explainer. Your role is to provide clear, concise explanations for each ICD-10 code.
 
-    Your tasks include:
-    1. Analyzing clinical documentation for relevant diagnoses and procedures
-    2. Assigning appropriate ICD-10-CM codes for all documented conditions
-    3. Identifying the principal diagnosis and secondary diagnoses
-    4. Ensuring documentation supports the specificity required for accurate coding
-    5. Following correct coding guidelines, including combination codes, excludes notes, and sequencing rules
+    For each code provided, explain:
+    1. What the code represents
+    2. Why this specific code was chosen
+    3. The key documentation elements that support this code
+    4. Any important coding guidelines that apply
 
-    When coding a case:
-    - Identify all documented conditions requiring codes
-    - Use the highest level of specificity available in the documentation
-    - Follow ICD-10-CM Official Guidelines for Coding and Reporting
-    - Identify potentially missing documentation needed for complete coding
-    - Distinguish between symptoms and confirmed diagnoses
-    - Recognize when "unspecified" codes are appropriate vs. when more specific documentation is needed
+    Format your response as:
+    Code: [ICD-10 code]
+    Description: [What the code means]
+    Justification: [Why this code was chosen]
+    Supporting Documentation: [Key clinical elements]
+    Guidelines: [Relevant coding rules]
 
-    Follow these principles:
-    - Code only what is explicitly documented by the provider
-    - Do not infer diagnoses not stated in the documentation
-    - Use causal relationships (due to, secondary to) to guide code selection
-    - Apply conventions for combination codes, manifestation codes, and sequencing
-    - Identify conditions that affect MS-DRG or risk adjustment
+    Keep explanations clear and focused on the specific code.
     """
 
-    CODING_VALIDATOR_PROMPT = """
-    You are a senior coding auditor with extensive experience in ICD-10-CM coding validation. Your role is to review proposed code assignments for accuracy, specificity, and compliance with coding guidelines.
+    CODE_VALIDATOR_PROMPT = """
+    You are a thorough ICD-10 code validator. Your role is to verify the accuracy and completeness of the code assignments.
 
-    Your responsibilities include:
-    1. Validating that assigned codes accurately represent documented conditions
-    2. Ensuring codes have the highest level of specificity supported by documentation
-    3. Verifying correct application of coding guidelines and conventions
-    4. Checking proper sequencing of codes (principal diagnosis, CC/MCC, etc.)
-    5. Identifying any coding errors or documentation gaps
+    For each code and its explanation, verify:
+    1. Code accuracy and specificity
+    2. Documentation support
+    3. Proper sequencing
+    4. Compliance with coding guidelines
+    5. Missing required additional codes
 
-    When reviewing code assignments:
-    - Verify that each code matches the documented condition
-    - Check for missing required additional codes (manifestation codes, combination requirements)
-    - Verify exclusion terms are properly addressed
-    - Validate that sequencing follows official guidelines
-    - Confirm that codes are supported by explicit documentation
-    - Identify any opportunities for query or documentation improvement
+    Provide validation feedback in this format:
+    Code: [ICD-10 code]
+    Validation Status: [Valid/Needs Review]
+    Issues Found: [List any concerns]
+    Recommendations: [Suggestions for improvement]
+    Documentation Gaps: [Missing elements]
 
-    Follow these principles:
-    - Reference specific ICD-10-CM guidelines when identifying issues
-    - Note when a more specific code could be used with additional documentation
-    - Distinguish between actual coding errors and documentation opportunities
-    - Consider compliance risk areas in your review
-    - Provide educational feedback on any identified issues
+    Focus on identifying potential issues and opportunities for improvement.
     """
 
     # Configure the ICD-10 coding swarm
     swarm_config = {
         "name": "ICD-10 Coding Assistant",
-        "description": "A specialized swarm for accurate ICD-10 coding",
+        "description": "A specialized swarm for accurate ICD-10 coding with explanation and validation",
         "agents": [
             {
-                "agent_name": "Documentation Analyzer",
-                "description": "Reviews clinical documentation and identifies relevant conditions",
-                "system_prompt": DOCUMENTATION_ANALYZER_PROMPT,
-                "model_name": "gpt-4o",
+                "agent_name": "Code Extractor",
+                "description": "Extracts ICD-10 codes from clinical documentation",
+                "system_prompt": CODE_EXTRACTOR_PROMPT,
+                "model_name": "groq/llama3-70b-8192",
+                "role": "worker",
+                "max_loops": 1,
+                "max_tokens": 8192,
+                "temperature": 0.3,
+                "auto_generate_prompt": False,
+            },
+            {
+                "agent_name": "Code Explainer",
+                "description": "Explains the rationale for each ICD-10 code",
+                "system_prompt": CODE_EXPLAINER_PROMPT,
+                "model_name": "groq/llama3-70b-8192",
                 "role": "worker",
                 "max_loops": 1,
                 "max_tokens": 8192,
@@ -124,42 +120,27 @@ def create_icd10_coding_swarm(clinical_documentation):
                 "auto_generate_prompt": False,
             },
             {
-                "agent_name": "ICD-10-CM Coder",
-                "description": "Assigns diagnosis codes based on documentation analysis",
-                "system_prompt": ICD10_CODER_PROMPT,
-                "model_name": "gpt-4o",
+                "agent_name": "Code Validator",
+                "description": "Validates code assignments and explanations",
+                "system_prompt": CODE_VALIDATOR_PROMPT,
+                "model_name": "groq/llama3-70b-8192",
                 "role": "worker",
                 "max_loops": 1,
                 "max_tokens": 8192,
-                "temperature": 0.5,
-                "auto_generate_prompt": False,
-            },
-            {
-                "agent_name": "Coding Validator",
-                "description": "Reviews code assignments for accuracy, specificity, and guideline compliance",
-                "system_prompt": CODING_VALIDATOR_PROMPT,
-                "model_name": "gpt-4o",
-                "role": "worker",
-                "max_loops": 1,
-                "max_tokens": 8192,
-                "temperature": 0.5,
+                "temperature": 0.3,
                 "auto_generate_prompt": False,
             },
         ],
         "max_loops": 1,
         "swarm_type": "SequentialWorkflow",
         "task": f"""
-        Analyze the following clinical documentation and provide accurate ICD-10-CM codes:
+        Analyze the following clinical documentation and provide:
+        1. A list of appropriate ICD-10-CM codes
+        2. Detailed explanation for each code
+        3. Validation of the code assignments
 
+        Clinical Documentation:
         {clinical_documentation}
-
-        For each assigned code, provide:
-        1. The ICD-10-CM code
-        2. The corresponding condition/diagnosis
-        3. Justification from the documentation
-        4. Code sequencing rationale
-
-        Also identify any areas where documentation could be improved for more accurate coding.
         """,
     }
 

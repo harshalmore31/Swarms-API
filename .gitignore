@@ -36,8 +36,10 @@ docker-deploy.sh
 #  Usually these files are written by a python script from a template
 #  before PyInstaller builds the exe, so as to inject date/other infos into it.
 *.manifest
-*.spec
+agent_finance
 
+*.spec
+agent_finance_charts
 # Installer logs
 pip-log.txt
 secret
