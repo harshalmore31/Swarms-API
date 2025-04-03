@@ -715,7 +715,8 @@ def create_swarm(swarm_spec: SwarmSpec, api_key: str):
 QDRANT_URL = os.getenv("QDRANT_URL")
 QDRANT_API_KEY = os.getenv("QDRANT_API_KEY")
 
-def rag_pipeline(operation, collection_name, data=None, query=None, vector_dim=1536, embedding_model="text-embedding-3-small"):
+def rag_pipeline(operation: str, collection_name: str, data: Optional[List[str]] = None, query: Optional[str] = None, vector_dim: int = 1536, embedding_model: str = "text-embedding-3-small"
+) -> Union[bool, tuple, None]:
     """Unified RAG pipeline for indexing and retrieval operations."""
     # Fixed constants
     C = {"metric": "Cosine", "chunk_size": 500, "overlap": 50, "batch": 50, "limit": 3, "threshold": 0.35}
