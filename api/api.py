@@ -196,9 +196,10 @@ class AgentSpec(BaseModel):
         None,
         description="Documents to ingest into the Qdrant collection for RAG. (List of text strings)",
     )
-    # tools_dictionary: Optional[List[Dict[str, Any]]] = Field(
-    #     description="A dictionary of tools that the agent can use to complete its task."
-    # )
+    tools: Optional[List[Dict[str, Any]]] = Field(
+        None,
+        description="A dictionary of tools that the agent can use to complete its task."
+    )
 
 
 class Agents(BaseModel):
@@ -566,10 +567,10 @@ def create_single_agent(agent_spec: Union[AgentSpec, dict]) -> Agent:
         if not agent_spec.model_name:
             raise ValueError("Model name is required.")
 
-        # if agent_spec.tools_dictionary is not None:
-        #     tools_list_dictionary = agent_spec.tools_dictionary
-        # else:
-        #     tools_list_dictionary = None
+        # Check if tools are provided
+        tools_list_dictionary = None
+        if agent_spec.tools is not None:
+            tools_list_dictionary = agent_spec.tools
 
         # Create the agent
         agent = Agent(
@@ -583,7 +584,7 @@ def create_single_agent(agent_spec: Union[AgentSpec, dict]) -> Agent:
             role=agent_spec.role or "worker",
             max_loops=agent_spec.max_loops or 1,
             dynamic_temperature_enabled=True,
-            # tools_list_dictionary=tools_list_dictionary,
+            tools_list_dictionary=tools_list_dictionary,
         )
 
         logger.info("Successfully created agent: {}", agent_spec.agent_name)
@@ -901,7 +902,25 @@ async def run_swarm_completion(
         time()
 
         try:
+            # Check for context from previous function call results
+            context = getattr(swarm, 'context', None)
+            
+            # Process swarm task based on context
+            if context and isinstance(context, dict) and 'function_result' in context:
+                # If we have function result in the context, modify the task
+                original_task = context.get('original_query', swarm.task)
+                function_result = context['function_result']
+                # Create a more informative task with the function result included
+                modified_task = f"Original query: {original_task}\n\nFunction returned: {function_result}\n\nPlease provide a final response based on this information."
+                swarm.task = modified_task
+                
+            # Create and run the swarm
             result = create_swarm(swarm, x_api_key)
+            
+            # Process any tool calls in the result
+            if isinstance(result, dict):
+                result = process_tool_calls(result)
+                
         except Exception as e:
             logger.error(f"Error running swarm: {e}")
             raise HTTPException(
@@ -949,6 +968,42 @@ async def run_swarm_completion(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to run swarm: {e}",
         )
+
+
+def process_tool_calls(agent_response: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Process the tool calls in an agent's response.
+    
+    Args:
+        agent_response: The raw response from the agent
+    
+    Returns:
+        Processed response with tool_calls information
+    """
+    try:
+        # Check if there are tool calls in the response
+        if "tool_calls" in agent_response:
+            return agent_response
+            
+        # Check for function_call in the response (for backward compatibility)
+        if "function_call" in agent_response:
+            function_call = agent_response["function_call"]
+            # Convert to tool_calls format
+            tool_calls = [{
+                "id": str(uuid4()),
+                "type": "function",
+                "function": {
+                    "name": function_call.get("name", ""),
+                    "arguments": function_call.get("arguments", "{}")
+                }
+            }]
+            agent_response["tool_calls"] = tool_calls
+            
+        return agent_response
+        
+    except Exception as e:
+        logger.error(f"Error processing tool calls: {str(e)}")
+        return agent_response
 
 
 def deduct_credits(api_key: str, amount: float, product_name: str) -> None:
