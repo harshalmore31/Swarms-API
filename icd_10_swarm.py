@@ -123,7 +123,7 @@ def create_icd10_coding_swarm(clinical_documentation):
                 "agent_name": "Code Validator",
                 "description": "Validates code assignments and explanations",
                 "system_prompt": CODE_VALIDATOR_PROMPT,
-                "model_name": "groq/llama3-70b-8192",
+                "model_name": "groq/deepseek-r1-distill-llama-70b",
                 "role": "worker",
                 "max_loops": 1,
                 "max_tokens": 8192,
@@ -132,7 +132,7 @@ def create_icd10_coding_swarm(clinical_documentation):
             },
         ],
         "max_loops": 1,
-        "swarm_type": "SequentialWorkflow",
+        "swarm_type": "ConcurrentWorkflow",
         "task": f"""
         Analyze the following clinical documentation and provide:
         1. A list of appropriate ICD-10-CM codes

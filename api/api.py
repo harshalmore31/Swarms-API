@@ -188,6 +188,57 @@ class AgentSpec(BaseModel):
     # )
 
 
+class AgentCompletion(BaseModel):
+    """
+    Configuration for a single agent that works together as a swarm to accomplish tasks.
+    """
+
+    agent: AgentSpec = Field(
+        ...,
+        description="The agent to run.",
+    )
+    task: Optional[str] = Field(
+        ...,
+        description="The task to run.",
+    )
+    img: Optional[str] = Field(
+        None,
+        description="An optional image URL that may be associated with the swarm's task or representation.",
+    )
+    output_type: Optional[str] = Field(
+        "list",
+        description="The type of output to return.",
+    )
+
+
+class AgentCompletionResponse(BaseModel):
+    """
+    Response from an agent completion.
+    """
+
+    agent_id: str = Field(
+        ...,
+        description="The unique identifier for the agent that completed the task.",
+    )
+    agent_name: str = Field(
+        ...,
+        description="The name of the agent that completed the task.",
+    )
+    agent_description: str = Field(
+        ...,
+        description="The description of the agent that completed the task.",
+    )
+    messages: Any = Field(
+        ...,
+        description="The messages from the agent completion.",
+    )
+
+    cost: Dict[str, Any] = Field(
+        ...,
+        description="The cost of the agent completion.",
+    )
+
+
 class Agents(BaseModel):
     """Configuration for a collection of agents that work together as a swarm to accomplish tasks."""
 
@@ -1009,6 +1060,101 @@ def calculate_swarm_cost(
         raise ValueError(f"Failed to calculate swarm cost: {str(e)}")
 
 
+def calculate_agent_cost(
+    agent: Agent,
+    input_text: str,
+    execution_time: float,
+    agent_output: Union[Any, Dict[str, Any]],
+) -> Dict[str, Any]:
+    """
+    Calculate the cost of running a single agent based on tokens and execution time.
+    Uses the same pricing logic as swarm calculations.
+
+    Args:
+        agent: The agent used
+        input_text: The input task/prompt text
+        execution_time: Time taken to execute in seconds
+        agent_output: Output text from the agent or a dictionary
+
+    Returns:
+        Dict containing cost breakdown and total cost
+    """
+    # Base costs per unit (matching swarm costs)
+    COST_PER_AGENT = 0.01  # Base cost per agent
+    COST_PER_1M_INPUT_TOKENS = 2.00  # Cost per 1M input tokens
+    COST_PER_1M_OUTPUT_TOKENS = 4.50  # Cost per 1M output tokens
+
+    # Get current time in California timezone
+    california_tz = pytz.timezone("America/Los_Angeles")
+    current_time = datetime.now(california_tz)
+    is_night_time = current_time.hour >= 20 or current_time.hour < 6  # 8 PM to 6 AM
+
+    try:
+        # Calculate input tokens for task
+        task_tokens = count_tokens(input_text)
+
+        # Calculate total input tokens including system prompt and memory
+        total_input_tokens = task_tokens
+
+        # Add system prompt tokens if present
+        if agent.system_prompt:
+            total_input_tokens += count_tokens(agent.system_prompt)
+
+        # Add memory tokens if available
+        try:
+            memory = agent.short_memory.return_history_as_string()
+            if memory:
+                memory_tokens = count_tokens(str(memory))
+                total_input_tokens += memory_tokens
+        except Exception as e:
+            logger.warning(
+                f"Could not get memory for agent {agent.agent_name}: {str(e)}"
+            )
+
+        # Calculate output tokens
+        if agent_output:
+            if isinstance(agent_output, dict):
+                total_output_tokens = count_tokens(any_to_str(agent_output))
+            elif isinstance(agent_output, str):
+                total_output_tokens = count_tokens(agent_output)
+            else:
+                total_output_tokens = count_tokens(any_to_str(agent_output))
+
+        # Calculate costs (convert to millions of tokens)
+        agent_cost = COST_PER_AGENT
+        input_token_cost = (total_input_tokens / 1_000_000) * COST_PER_1M_INPUT_TOKENS
+        output_token_cost = (
+            total_output_tokens / 1_000_000
+        ) * COST_PER_1M_OUTPUT_TOKENS
+
+        # Apply discount during California night time hours
+        if is_night_time:
+            input_token_cost *= 0.25  # 75% discount
+            output_token_cost *= 0.25  # 75% discount
+
+        # Calculate total cost
+        total_cost = agent_cost + input_token_cost + output_token_cost
+
+        return {
+            "cost_breakdown": {
+                "agent_cost": round(agent_cost, 6),
+                "input_token_cost": round(input_token_cost, 6),
+                "output_token_cost": round(output_token_cost, 6),
+                "token_counts": {
+                    "input_tokens": total_input_tokens,
+                    "output_tokens": total_output_tokens,
+                    "total_tokens": total_input_tokens + total_output_tokens,
+                },
+                "execution_time_seconds": round(execution_time, 2),
+            },
+            "total_cost": round(total_cost, 6),
+        }
+
+    except Exception as e:
+        logger.error(f"Error calculating agent cost: {str(e)}")
+        raise ValueError(f"Failed to calculate agent cost: {str(e)}")
+
+
 async def auto_generate_agents(request: AutoGenerateAgentsSpec):
     """
     Automatically generate agents for a given task.
@@ -1162,6 +1308,54 @@ async def telemetry_middleware(request: Request, call_next):
         raise  # Re-raise the original exception
 
 
+async def agent_completion(agent: AgentCompletion, x_api_key: str = Header(...)):
+    """
+    Run an agent with the specified task.
+    """
+
+    agent_instance = create_single_agent(agent.agent)
+    agent_instance.output_type = agent.output_type.lower()
+    start_time = time()
+
+    logger.info(
+        f"Starting to run agent: {agent_instance.agent_name} with task: {agent.task}"
+    )
+
+    try:
+        result = await agent_instance.run(task=agent.task)
+        logger.info(
+            f"Successfully ran agent: {agent_instance.agent_name} with task: {agent.task}"
+        )
+    except Exception as e:
+        logger.error(f"Error running agent {agent_instance.agent_name}: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to run the agent.",
+        )
+
+    end_time = time() - start_time
+    logger.info(
+        f"Agent {agent_instance.agent_name} completed in {end_time:.2f} seconds"
+    )
+
+    cost = calculate_agent_cost(agent_instance, agent.task, end_time, result)
+
+    # Deduct credits
+    deduct_credits(
+        x_api_key,
+        cost["total_cost"],
+        f"agent_execution_{agent_instance.agent_name}",
+    )
+
+    return AgentCompletionResponse(
+        agent_id=agent_instance.id,
+        agent_name=agent_instance.agent_name,
+        agent_description=agent_instance.description,
+        messages=result,
+        cost=cost,
+    )
+
+
 @app.get("/health")
 def health():
     return {"status": "ok"}
@@ -1181,6 +1375,19 @@ async def check_swarm_types() -> Dict[str, Any]:
     }
 
     return out
+
+
+@app.post(
+    "/v1/agent/completions",
+    dependencies=[
+        Depends(verify_api_key),
+        Depends(rate_limiter),
+    ],
+)
+async def run_agent(
+    agent: AgentCompletion, x_api_key=Header(...)
+) -> AgentCompletionResponse:
+    return await agent_completion(agent, x_api_key)
 
 
 @app.post(
@@ -1251,43 +1458,6 @@ def run_batch_completions(
             results.append(result)
 
     return results
-
-
-# @app.post(
-#     "/v1/swarms/marketplace/publish",
-#     dependencies=[
-#         Depends(verify_api_key),
-#         Depends(rate_limiter),
-#     ],
-# )
-# async def publish_marketplace_swarm(
-#     swarm: MarketplaceSwarmComplete, x_api_key: str = Header(...)
-# ) -> Dict[str, Any]:
-#     """
-#     Publish a swarm to the marketplace.
-#     """
-#     try:
-
-#         # Set the creator ID
-#         swarm.creator_id = str(uuid.uuid4())
-
-#         await log_api_request(
-#             x_api_key,
-#             {"action": "publish_marketplace_swarm", "swarm_config": swarm.model_dump()},
-#         )
-
-#         return {
-#             "status": "success",
-#             "message": "Swarm published successfully",
-#             "swarm": swarm.model_dump(),
-#         }
-
-#     except Exception as e:
-#         logger.error(f"Error publishing marketplace swarm: {str(e)}")
-#         raise HTTPException(
-#             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-#             detail=f"Failed to publish swarm: {str(e)}",
-#         )
 
 
 # Add this new endpoint
