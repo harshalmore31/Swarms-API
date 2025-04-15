@@ -12,6 +12,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+
 class AgentSpec(BaseModel):
     agent_name: Optional[str] = Field(
         description="The unique name assigned to the agent, which identifies its role and functionality within the swarm.",
@@ -235,9 +236,12 @@ def swarm_completion(swarm: SwarmSpec) -> Dict[str, Any]:
 
     payload = swarm.model_dump()
 
-    response = requests.post(f"{BASE_URL}/v1/swarm/completions", json=payload, headers=headers)
-    
+    response = requests.post(
+        f"{BASE_URL}/v1/swarm/completions", json=payload, headers=headers
+    )
+
     return response.json()
+
 
 @mcp.tool(name="swarms_available", description="Get the list of available swarms.")
 async def swarms_available() -> Any:

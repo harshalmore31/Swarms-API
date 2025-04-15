@@ -1,9 +1,5 @@
 import asyncio
-import os
 from fastmcp import Client
-from fastmcp.client.transports import (
-    SSETransport,
-)
 
 swarm_config = {
     "name": "Simple Financial Analysis",
@@ -47,15 +43,15 @@ swarm_config = {
     "swarm_type": "SequentialWorkflow",
     "task": "Analyze the financial data and provide insights.",
     "return_history": False,  # Added required field
-    "stream": False,         # Added required field
-    "rules": None,          # Added optional field
-    "img": None,            # Added optional field
+    "stream": False,  # Added required field
+    "rules": None,  # Added optional field
+    "img": None,  # Added optional field
 }
+
 
 async def fetch_weather_and_resource():
     """Connect to a server over SSE and fetch available swarms."""
 
-    
     async with Client(
         transport="http://localhost:8000/sse"
         # SSETransport(
@@ -67,15 +63,9 @@ async def fetch_weather_and_resource():
         # print("Ping check:", await client.ping())
         # print("Available tools:", await client.list_tools())
         # print("Swarms available:", await client.call_tool("swarms_available", None))
-        # Structure the parameters according to SwarmSpec model
-        # Call swarm_completion with properly nested parameters
-        result = await client.call_tool(
-            "swarm_completion", 
-            {
-                "swarm": swarm_config
-            }
-        )
+        result = await client.call_tool("swarm_completion", {"swarm": swarm_config})
         print("Swarm completion:", result)
+
 
 # Execute the function
 if __name__ == "__main__":
