@@ -185,47 +185,74 @@ if __name__ == "__main__":
     print("Swarm Result:")
     print(result)
 ```
+-----
 
-## Scheduling Example
+# MCP
+
+You can leverage the swarms api as a MCP server like listed below. [Click here for the code]()
 
 ```python
-import datetime
-import pytz
-from datetime import timedelta
+# server.py
+from datetime import datetime
+import os
+from typing import Any, Dict, List, Optional
 
-# Schedule a swarm to run in 1 hour
-future_time = datetime.datetime.now(pytz.UTC) + timedelta(hours=1)
+import requests
+import httpx
+from fastmcp import FastMCP
+from pydantic import BaseModel, Field
+from swarms import SwarmType
+from dotenv import load_dotenv
 
-schedule_payload = {
-    "name": "Daily Market Analysis",
-    "agents": [
-        {
-            "agent_name": "Market Analyzer",
-            "model_name": "gpt-4o",
-            "system_prompt": "You analyze financial markets daily"
-        }
-    ],
-    "swarm_type": "SequentialWorkflow",
-    "task": "Provide a summary of today's market movements",
-    "schedule": {
-        "scheduled_time": future_time.isoformat(),
-        "timezone": "America/New_York"
-    }
-}
+load_dotenv()
 
-response = requests.post(
-    f"{BASE_URL}/v1/swarm/schedule",
-    headers=headers,
-    json=schedule_payload
-)
+
+
+BASE_URL = "https://swarms-api-285321057562.us-east1.run.app"
+
+
+# Create an MCP server
+mcp = FastMCP("swarms-api")
+
+
+# Add an addition tool
+@mcp.tool(name="swarm_completion", description="Run a swarm completion.")
+def swarm_completion(swarm: SwarmSpec) -> Dict[str, Any]:
+    api_key = os.getenv("SWARMS_API_KEY")
+    headers = {"x-api-key": api_key, "Content-Type": "application/json"}
+
+    payload = swarm.model_dump()
+
+    response = requests.post(f"{BASE_URL}/v1/swarm/completions", json=payload, headers=headers)
+    
+    return response.json()
+
+@mcp.tool(name="swarms_available", description="Get the list of available swarms.")
+async def swarms_available() -> Any:
+    """
+    Get the list of available swarms.
+    """
+    headers = {"Content-Type": "application/json"}
+
+    async with httpx.AsyncClient() as client:
+        response = await client.get(f"{BASE_URL}/v1/models/available", headers=headers)
+        response.raise_for_status()  # Raise an error for bad responses
+        return response.json()
+
+
+if __name__ == "__main__":
+    mcp.run(transport="sse")
 ```
 
 ## Credit Usage
 
 API usage consumes credits based on:
 1. Number of agents used
+
 2. Input/output token count
+
 3. Model selection
+
 4. Time of day (discounts during off-peak hours)
 
 For detailed pricing information, visit the [API Pricing](https://docs.swarms.world/en/latest/swarms_cloud/api_pricing/) page.
