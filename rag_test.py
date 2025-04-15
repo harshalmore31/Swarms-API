@@ -12,40 +12,81 @@ BASE_URL = "http://localhost:8080"
 
 headers = {"x-api-key": API_KEY, "Content-Type": "application/json"}
 
+
 def run_health_check():
     response = requests.get(f"{BASE_URL}/health", headers=headers)
     return response.json()
 
+
 def run_single_swarm():
-    # Try to read the document; if not found, use a default text.
-    content = "In 1987, a secret deep-space probe called Project Zenith was launched by an unknown coalition of scientists. The probe reportedly sent back signals from outside our solar system, detecting non-random patterns near Proxima Centauri before ceasing transmissions in 1994, with all official records disappearing. A declassified document from 2003 suggests that an ancient artifact found in Antarctica, known as the Aquila Fragment, shares molecular similarities with lunar materials and bears inscriptions resembling Mesopotamian symbols, hinting at extraterrestrial influence. In 2011, an amateur astronomer intercepted a signal from an unregistered geostationary satellite containing repeating numerical sequences and encrypted pictograms, speculated to be a relay station of unknown origin. Reports from the 1972 Apollo 18 mission—which was officially canceled—allegedly describe unidentified structures on the far side of the Moon, with leaked transcripts suggesting astronauts were ordered to cease communication upon discovery. In 2020, a research team studying deep-sea vents in the Pacific discovered a metallic sphere emitting low-frequency pulses, dubbed the Hadal Anomaly, which resisted conventional analysis and was quickly classified. A little-known passage in the Dead Sea Scrolls describes ‘visitors from the sky’ imparting astronomical and mathematical knowledge to early scholars, aligning with Babylonian star charts mapping celestial objects not visible without advanced telescopes. In 1998, Russian cosmonauts aboard the Mir space station reported seeing a large structured craft moving at impossible speeds just outside Earth's orbit, though the event was later dismissed as an optical illusion. Anomalous drone footage from the Nazca Lines in 2019 revealed a previously unseen geoglyph of a humanoid figure with elongated limbs and an oversized head, carved much deeper into the earth than other formations, suggesting it predates the known Nazca civilization."
-    # Swarm payload with three agents configured for RAG functionality.
+    # Contextualized content specifically about Project Zenith.
+    content1 = (
+        "In 1987, a secret deep-space probe called Project Zenith was launched by an "
+        "unknown coalition of scientists. The probe reportedly sent back signals from "
+        "outside our solar system, detecting non-random patterns near Proxima Centauri. "
+        "This groundbreaking project aimed to explore the potential for extraterrestrial "
+        "life and advanced technologies. However, after sending transmissions until 1994, "
+        "all official records of the project mysteriously disappeared, leading to numerous "
+        "theories about its findings and the fate of the probe."
+    )
+    content2 = (
+        "Project Zenith was not just a scientific endeavor; it represented humanity's "
+        "first serious attempt to communicate with potential extraterrestrial civilizations. "
+        "The probe's advanced technology allowed it to analyze cosmic signals, and its "
+        "findings hinted at the existence of complex life forms beyond Earth. Despite its "
+        "disappearance, the legacy of Project Zenith continues to inspire scientists and "
+        "enthusiasts alike."
+    )
+    content3 = (
+        "In the years following the launch of Project Zenith, various conspiracy theories "
+        "emerged, suggesting that the probe had made contact with alien life. Some claimed "
+        "that the project was shut down due to government pressure, while others believed "
+        "it was a cover-up of groundbreaking discoveries. The mystery surrounding Project "
+        "Zenith fuels ongoing debates in both scientific and popular culture."
+    )
+
+    # Swarm payload with agents configured for RAG functionality, focused on Project Zenith.
     payload = {
-        "name": "Space Exp. Swarm",
-        "description": "A swarm of agents designed to explore and analyze space-related data.",
+        "name": "Project Zenith Exploration Swarm",
+        "description": "A swarm of agents designed to explore and analyze data from Project Zenith.",
         "agents": [
             {
-                "agent_name": "Space Explorer",
-                "description": "You are an Space Explorer",
-                "system_prompt": "You are a helpful AI.",
+                "agent_name": "Space Exploration Specialist",
+                "description": "You are an expert in space exploration and extraterrestrial research.",
+                "system_prompt": "You are a knowledgeable AI focused on space exploration.",
                 "model_name": "openai/gpt-4o",
                 "role": "worker",
                 "max_loops": 1,
                 "max_tokens": 8192,
                 "temperature": 0.7,
                 "auto_generate_prompt": False,
-                "rag_collection": "space_expo",
-                "rag_documents": [content]
+                "rag_collection": "project_zenith_research",
+                "rag_documents": [content1, content2, content3],
+            },
+            {
+                "agent_name": "Extraterrestrial Communication Analyst",
+                "description": "You specialize in analyzing signals and communications from potential extraterrestrial sources.",
+                "system_prompt": "You are an AI focused on interpreting cosmic signals and their implications.",
+                "model_name": "openai/gpt-4o",
+                "role": "worker",
+                "max_loops": 1,
+                "max_tokens": 8192,
+                "temperature": 0.7,
+                "auto_generate_prompt": False,
+                "rag_collection": "project_zenith_research",
+                "rag_documents": [content1, content2, content3],
             },
         ],
         "max_loops": 1,
-        "swarm_type": "ConcurrentWorkflow",
-        "task": "what is project Zenith ?.",
-        "output_type": "dict"
+        "swarm_type": "SequentialWorkflow",
+        "task": "Identify the key findings and implications of Project Zenith.",
+        "output_type": "dict",
     }
 
     print("Sending swarm request...")
-    response = requests.post(f"{BASE_URL}/v1/swarm/completions", headers=headers, json=payload)
+    response = requests.post(
+        f"{BASE_URL}/v1/swarm/completions", headers=headers, json=payload
+    )
     print("Status Code:", response.status_code)
     try:
         result = response.json()
@@ -55,26 +96,14 @@ def run_single_swarm():
         result = None
     return result
 
-def get_logs():
-    response = requests.get(f"{BASE_URL}/v1/swarm/logs", headers=headers)
-    try:
-        return response.json()
-    except Exception as ex:
-        print("Error parsing logs JSON:", ex)
-        return None
 
 if __name__ == "__main__":
     # Run health check
     health = run_health_check()
     print("Health Check Response:")
     print(json.dumps(health, indent=4))
-    
+
     # Run a single swarm with RAG-enabled agents
     swarm_result = run_single_swarm()
     print("Swarm Result:")
     print(json.dumps(swarm_result, indent=4))
-    
-    # Retrieve and print API logs
-    logs = get_logs()
-    print("Logs:")
-    print(json.dumps(logs, indent=4))

@@ -40,7 +40,8 @@ from litellm import model_list
 from loguru import logger
 from pydantic import BaseModel, Field
 from swarms import Agent, SwarmRouter, SwarmType
-from swarms.structs import AgentsBuilder
+
+# from swarms.structs.agent_builder import AgentsBuilder
 from swarms.utils.any_to_str import any_to_str
 from swarms.utils.litellm_tokenizer import count_tokens
 
@@ -50,8 +51,11 @@ from litellm import embedding
 
 load_dotenv()
 
+
 # --- Async generator to stream a dictionary as NDJSON ---
-async def async_stream_dict(data: Dict[str, Any], delay: float = 0.0) -> AsyncGenerator[str, None]:
+async def async_stream_dict(
+    data: Dict[str, Any], delay: float = 0.0
+) -> AsyncGenerator[str, None]:
     for key, value in data.items():
         if delay:
             await asyncio.sleep(delay)  # Optional delay per key
@@ -60,10 +64,7 @@ async def async_stream_dict(data: Dict[str, Any], delay: float = 0.0) -> AsyncGe
 
 # --- Function to streamify any async function that returns a dict ---
 def async_streamify_dict(
-    fn: Callable[..., Awaitable[Dict[str, Any]]],
-    *args,
-    delay: float = 0.0,
-    **kwargs
+    fn: Callable[..., Awaitable[Dict[str, Any]]], *args, delay: float = 0.0, **kwargs
 ) -> StreamingResponse:
     """
     Call an async function that returns a dict and stream it as NDJSON.
@@ -198,7 +199,7 @@ class AgentSpec(BaseModel):
     )
     tools: Optional[List[Dict[str, Any]]] = Field(
         None,
-        description="A dictionary of tools that the agent can use to complete its task."
+        description="A dictionary of tools that the agent can use to complete its task.",
     )
 
 
@@ -767,126 +768,158 @@ def create_swarm(swarm_spec: SwarmSpec, api_key: str):
 QDRANT_URL = os.getenv("QDRANT_URL")
 QDRANT_API_KEY = os.getenv("QDRANT_API_KEY")
 
-def rag_pipeline(operation: str, collection_name: str, data: Optional[List[str]] = None, query: Optional[str] = None, vector_dim: int = 1536, embedding_model: str = "text-embedding-3-small"
+
+def rag_pipeline(
+    operation: str,
+    collection_name: str,
+    data: Optional[List[str]] = None,
+    query: Optional[str] = None,
+    vector_dim: int = 1536,
+    embedding_model: str = "text-embedding-3-small",
 ) -> Union[bool, tuple, None]:
     """Unified RAG pipeline for indexing and retrieval operations."""
     # Fixed constants
-    C = {"metric": "Cosine", "chunk_size": 500, "overlap": 50, "batch": 50, "limit": 3, "threshold": 0.35}
-    
+    C = {
+        "metric": "Cosine",
+        "chunk_size": 500,
+        "overlap": 50,
+        "batch": 50,
+        "limit": 3,
+        "threshold": 0.35,
+    }
+
     # Helper function for API requests
     def _req(method, path, json=None, params=None):
         if not QDRANT_URL or not QDRANT_API_KEY:
             return None
         try:
             resp = requests.request(
-                method, 
-                f"{QDRANT_URL}{path}", 
+                method,
+                f"{QDRANT_URL}{path}",
                 headers={"api-key": QDRANT_API_KEY, "Content-Type": "application/json"},
                 json=json,
                 params=params,
-                timeout=60
+                timeout=60,
             )
             resp.raise_for_status()
             return resp.json()
         except Exception as e:
             print(f"Qdrant API Error: {str(e)}")
             return None
-    
+
     # LiteLLM embedding function
     def _embed(texts):
         try:
             response = embedding(model=embedding_model, input=texts)
-            return [item['embedding'] for item in response.data]
+            return [item["embedding"] for item in response.data]
         except Exception as e:
             print(f"Embedding Error: {str(e)}")
             return None
-    
+
     # INDEXING OPERATION
     if operation == "index" and data:
         # Ensure collection exists
         exists = _req("GET", f"/collections/{collection_name}/exists")
         if not exists or exists.get("status") != "ok":
             return False
-            
+
         if not exists.get("result", {}).get("exists", False):
-            if not _req("PUT", f"/collections/{collection_name}", 
-                      json={"vectors": {"size": vector_dim, "distance": C["metric"]}}):
+            if not _req(
+                "PUT",
+                f"/collections/{collection_name}",
+                json={"vectors": {"size": vector_dim, "distance": C["metric"]}},
+            ):
                 return False
-        
+
         # Process documents into chunks
         chunks = []
-        for doc_idx, content in enumerate([d for d in data if isinstance(d, str) and d.strip()]):
+        for doc_idx, content in enumerate(
+            [d for d in data if isinstance(d, str) and d.strip()]
+        ):
             start, chunk_idx = 0, 0
             while start < len(content):
                 end = min(start + C["chunk_size"], len(content))
                 chunk_text = content[start:end].strip()
                 if chunk_text:
-                    chunks.append({
-                        "id": str(uuid4()),
-                        "text": chunk_text,
-                        "meta": {"doc_idx": doc_idx, "chunk_idx": chunk_idx}
-                    })
+                    chunks.append(
+                        {
+                            "id": str(uuid4()),
+                            "text": chunk_text,
+                            "meta": {"doc_idx": doc_idx, "chunk_idx": chunk_idx},
+                        }
+                    )
                     chunk_idx += 1
                 start = end - C["overlap"] if end - C["overlap"] > start else start + 1
-        
+
         if not chunks:
             return True
-            
+
         # Embed and upsert in batches
         success = True
         for i in range(0, len(chunks), C["batch"]):
-            batch = chunks[i:i + C["batch"]]
-            batch_texts = [item['text'] for item in batch]
+            batch = chunks[i : i + C["batch"]]
+            batch_texts = [item["text"] for item in batch]
             embeddings = _embed(batch_texts)
-            
+
             if not embeddings or len(embeddings) != len(batch):
                 success = False
                 continue
-                
-            points = [{
-                "id": item["id"],
-                "vector": emb,
-                "payload": {"content": item["text"], "metadata": item["meta"]}
-            } for item, emb in zip(batch, embeddings)]
-            
-            resp = _req("PUT", f"/collections/{collection_name}/points", 
-                      json={"points": points}, params={"wait": "true"})
+
+            points = [
+                {
+                    "id": item["id"],
+                    "vector": emb,
+                    "payload": {"content": item["text"], "metadata": item["meta"]},
+                }
+                for item, emb in zip(batch, embeddings)
+            ]
+
+            resp = _req(
+                "PUT",
+                f"/collections/{collection_name}/points",
+                json={"points": points},
+                params={"wait": "true"},
+            )
             if not resp or resp.get("result", {}).get("status") != "completed":
                 success = False
-                
+
         return success
-        
+
     # RETRIEVAL OPERATION
     elif operation == "retrieve" and query:
         query_emb = _embed([query])[0]
-        resp = _req("POST", f"/collections/{collection_name}/points/query", json={
-            "query": query_emb,
-            "limit": C["limit"],
-            "with_payload": True,
-            "with_vector": False,
-            "score_threshold": C["threshold"]
-        })
-        
+        resp = _req(
+            "POST",
+            f"/collections/{collection_name}/points/query",
+            json={
+                "query": query_emb,
+                "limit": C["limit"],
+                "with_payload": True,
+                "with_vector": False,
+                "score_threshold": C["threshold"],
+            },
+        )
+
         if not resp or resp.get("status") != "ok":
             return None, None
-            
+
         results = resp.get("result", {}).get("points", [])
         if not results:
             return "No relevant context found.", []
-            
+
         context = []
         sources = []
         for i, doc in enumerate(results):
             text = doc.get("payload", {}).get("content", "[Missing]")
             meta = doc.get("payload", {}).get("metadata", {})
             score = doc.get("score", 0.0)
-            
+
             context.append(f"Context {i+1} (Score: {score:.4f}):\n{text}")
-            meta['score'] = score
+            meta["score"] = score
             sources.append(meta)
-            
+
         return "\n\n---\n\n".join(context), sources
-        
+
     return None
 
 
@@ -933,12 +966,24 @@ async def run_swarm_completion(
             for agent_spec in swarm.agents:
                 if agent_spec.rag_collection:
                     if agent_spec.rag_documents and len(agent_spec.rag_documents) > 0:
-                        indexing_success = rag_pipeline("index", agent_spec.rag_collection, data=agent_spec.rag_documents)
+                        indexing_success = rag_pipeline(
+                            "index",
+                            agent_spec.rag_collection,
+                            data=agent_spec.rag_documents,
+                        )
                         if not indexing_success:
-                            logger.error(f"Failed to index documents for collection {agent_spec.rag_collection}")
-                    rag_context, rag_sources = rag_pipeline("retrieve", agent_spec.rag_collection, query=swarm.task)
+                            logger.error(
+                                f"Failed to index documents for collection {agent_spec.rag_collection}"
+                            )
+                    rag_context, rag_sources = rag_pipeline(
+                        "retrieve", agent_spec.rag_collection, query=swarm.task
+                    )
                     if rag_context:
-                        agent_spec.system_prompt = (agent_spec.system_prompt or "") + "\n\nRAG Context:\n" + rag_context
+                        agent_spec.system_prompt = (
+                            (agent_spec.system_prompt or "")
+                            + "\n\nRAG Context:\n"
+                            + rag_context
+                        )
 
         agents = swarm.agents
 
@@ -954,24 +999,24 @@ async def run_swarm_completion(
 
         try:
             # Check for context from previous function call results
-            context = getattr(swarm, 'context', None)
-            
+            context = getattr(swarm, "context", None)
+
             # Process swarm task based on context
-            if context and isinstance(context, dict) and 'function_result' in context:
+            if context and isinstance(context, dict) and "function_result" in context:
                 # If we have function result in the context, modify the task
-                original_task = context.get('original_query', swarm.task)
-                function_result = context['function_result']
+                original_task = context.get("original_query", swarm.task)
+                function_result = context["function_result"]
                 # Create a more informative task with the function result included
                 modified_task = f"Original query: {original_task}\n\nFunction returned: {function_result}\n\nPlease provide a final response based on this information."
                 swarm.task = modified_task
-                
+
             # Create and run the swarm
             result = create_swarm(swarm, x_api_key)
-            
+
             # Process any tool calls in the result
             if isinstance(result, dict):
                 result = process_tool_calls(result)
-                
+
         except Exception as e:
             logger.error(f"Error running swarm: {e}")
             raise HTTPException(
@@ -1024,10 +1069,10 @@ async def run_swarm_completion(
 def process_tool_calls(agent_response: Dict[str, Any]) -> Dict[str, Any]:
     """
     Process the tool calls in an agent's response.
-    
+
     Args:
         agent_response: The raw response from the agent
-    
+
     Returns:
         Processed response with tool_calls information
     """
@@ -1035,23 +1080,25 @@ def process_tool_calls(agent_response: Dict[str, Any]) -> Dict[str, Any]:
         # Check if there are tool calls in the response
         if "tool_calls" in agent_response:
             return agent_response
-            
+
         # Check for function_call in the response (for backward compatibility)
         if "function_call" in agent_response:
             function_call = agent_response["function_call"]
             # Convert to tool_calls format
-            tool_calls = [{
-                "id": str(uuid4()),
-                "type": "function",
-                "function": {
-                    "name": function_call.get("name", ""),
-                    "arguments": function_call.get("arguments", "{}")
+            tool_calls = [
+                {
+                    "id": str(uuid4()),
+                    "type": "function",
+                    "function": {
+                        "name": function_call.get("name", ""),
+                        "arguments": function_call.get("arguments", "{}"),
+                    },
                 }
-            }]
+            ]
             agent_response["tool_calls"] = tool_calls
-            
+
         return agent_response
-        
+
     except Exception as e:
         logger.error(f"Error processing tool calls: {str(e)}")
         return agent_response
@@ -1364,24 +1411,24 @@ def calculate_agent_cost(
         raise ValueError(f"Failed to calculate agent cost: {str(e)}")
 
 
-async def auto_generate_agents(request: AutoGenerateAgentsSpec):
-    """
-    Automatically generate agents for a given task.
-    """
-    agents_builder = AgentsBuilder(return_dictionary=True)
+# async def auto_generate_agents(request: AutoGenerateAgentsSpec):
+#     """
+#     Automatically generate agents for a given task.
+#     """
+#     agents_builder = AgentsBuilder(return_dictionary=True)
 
-    start_time = time()
-    agents = await asyncio.to_thread(agents_builder.run, task=request.task)
-    end_time = time()
+#     start_time = time()
+#     agents = await asyncio.to_thread(agents_builder.run, task=request.task)
+#     end_time = time()
 
-    calculate_swarm_cost(
-        agents=agents_builder,
-        input_text=request.task + agents_builder.system_prompt,
-        execution_time=end_time - start_time,
-        agent_outputs=any_to_str(agents),
-    )
+#     calculate_swarm_cost(
+#         agents=agents_builder,
+#         input_text=request.task + agents_builder.system_prompt,
+#         execution_time=end_time - start_time,
+#         agent_outputs=any_to_str(agents),
+#     )
 
-    return agents
+#     return agents
 
 
 async def get_swarm_types() -> List[str]:
