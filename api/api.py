@@ -2,7 +2,9 @@ import asyncio
 import json
 import os
 import platform
+import secrets
 import socket
+import string
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
@@ -40,16 +42,8 @@ from litellm import model_list
 from loguru import logger
 from pydantic import BaseModel, Field
 from swarms import Agent, SwarmRouter, SwarmType
-
-# from swarms.structs.agent_builder import AgentsBuilder
 from swarms.utils.any_to_str import any_to_str
 from swarms.utils.litellm_tokenizer import count_tokens
-
-# Additional imports for RAG functionality
-import requests
-from litellm import embedding
-
-load_dotenv()
 
 
 # --- Async generator to stream a dictionary as NDJSON ---
@@ -86,7 +80,9 @@ def async_streamify_dict(
     return StreamingResponse(generator(), media_type="application/x-ndjson")
 
 
-# Load configuration
+load_dotenv()
+
+# Define rate limit parameters
 RATE_LIMIT = 100  # Max requests
 TIME_WINDOW = 60  # Time window in seconds
 
@@ -96,7 +92,34 @@ request_counts = defaultdict(lambda: {"count": 0, "start_time": time()})
 # In-memory store for scheduled jobs
 scheduled_jobs: Dict[str, Dict] = {}
 
-app = FastAPI()
+app = FastAPI(
+    title="Swarms API",
+    description="The Swarms API is a powerful tool for managing and executing multi-agent systems with ease. It provides a flexible model support, diverse swarm architectures, dynamic agent configuration, and real-time monitoring capabilities.",
+)
+
+
+async def _generate_key(prefix: str = "swarms") -> str:
+    """
+    Asynchronously generates an API key similar to OpenAI's format (sk-XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX).
+
+    Args:
+        prefix (str): The prefix for the API key. Defaults to "sk".
+
+    Returns:
+        str: An API key string in format: prefix-<48 random characters>
+    """
+
+    def generate():
+        # Create random string of letters and numbers
+        alphabet = string.ascii_letters + string.digits
+        random_part = "".join(secrets.choice(alphabet) for _ in range(28))
+        return f"{prefix}-{random_part}"
+
+    return await asyncio.to_thread(generate)
+
+
+def generate_key() -> str:
+    return asyncio.run(_generate_key())
 
 
 def rate_limiter(request: Request):
@@ -188,70 +211,9 @@ class AgentSpec(BaseModel):
         default=1,
         description="The maximum number of times the agent is allowed to repeat its task, enabling iterative processing if necessary.",
     )
-    # New fields for RAG functionality
-    rag_collection: Optional[str] = Field(
-        None,
-        description="The Qdrant collection name for RAG functionality. If provided, this agent will perform RAG queries.",
-    )
-    rag_documents: Optional[List[str]] = Field(
-        None,
-        description="Documents to ingest into the Qdrant collection for RAG. (List of text strings)",
-    )
-    tools: Optional[List[Dict[str, Any]]] = Field(
-        None,
-        description="A dictionary of tools that the agent can use to complete its task.",
-    )
-
-
-class AgentCompletion(BaseModel):
-    """
-    Configuration for a single agent that works together as a swarm to accomplish tasks.
-    """
-
-    agent: AgentSpec = Field(
-        ...,
-        description="The agent to run.",
-    )
-    task: Optional[str] = Field(
-        ...,
-        description="The task to run.",
-    )
-    img: Optional[str] = Field(
-        None,
-        description="An optional image URL that may be associated with the swarm's task or representation.",
-    )
-    output_type: Optional[str] = Field(
-        "list",
-        description="The type of output to return.",
-    )
-
-
-class AgentCompletionResponse(BaseModel):
-    """
-    Response from an agent completion.
-    """
-
-    agent_id: str = Field(
-        ...,
-        description="The unique identifier for the agent that completed the task.",
-    )
-    agent_name: str = Field(
-        ...,
-        description="The name of the agent that completed the task.",
-    )
-    agent_description: str = Field(
-        ...,
-        description="The description of the agent that completed the task.",
-    )
-    messages: Any = Field(
-        ...,
-        description="The messages from the agent completion.",
-    )
-
-    cost: Dict[str, Any] = Field(
-        ...,
-        description="The cost of the agent completion.",
-    )
+    # tools_dictionary: Optional[List[Dict[str, Any]]] = Field(
+    #     description="A dictionary of tools that the agent can use to complete its task."
+    # )
 
 
 class Agents(BaseModel):
@@ -338,38 +300,6 @@ class SwarmSpec(BaseModel):
     stream: Optional[bool] = Field(
         False,
         description="A flag indicating whether the swarm should stream its output.",
-    )
-
-
-class MarketplaceSwarmMetadata(BaseModel):
-    """Metadata for a marketplace swarm listing"""
-
-    name: str = Field(..., description="Unique name of the swarm")
-    description: str = Field(..., description="Description of what the swarm does")
-    creator_id: str = Field(
-        default_factory=lambda: str(uuid4()),
-        description="ID of the user who created the swarm",
-    )
-    tags: List[str] = Field(default=[], description="Tags to categorize the swarm")
-    price: Decimal = Field(..., description="Price in credits to run the swarm")
-    version: str = Field(default="1.0.0", description="Version of the swarm")
-    created_at: str = Field(default_factory=lambda: datetime.now().isoformat())
-    updated_at: str = Field(default_factory=lambda: datetime.now().isoformat())
-    is_public: bool = Field(
-        default=True, description="Whether the swarm is publicly available"
-    )
-
-
-class MarketplaceSwarmComplete(MarketplaceSwarmMetadata):
-    """Complete marketplace swarm including the actual swarm spec"""
-
-    swarm_spec: SwarmSpec = Field(..., description="The actual swarm specification")
-
-
-class AutoGenerateAgentsSpec(BaseModel):
-    task: str = Field(
-        None,
-        description="The task that the swarm should complete.",
     )
 
 
@@ -619,10 +549,10 @@ def create_single_agent(agent_spec: Union[AgentSpec, dict]) -> Agent:
         if not agent_spec.model_name:
             raise ValueError("Model name is required.")
 
-        # Check if tools are provided
-        tools_list_dictionary = None
-        if agent_spec.tools is not None:
-            tools_list_dictionary = agent_spec.tools
+        # if agent_spec.tools_dictionary is not None:
+        #     tools_list_dictionary = agent_spec.tools_dictionary
+        # else:
+        #     tools_list_dictionary = None
 
         # Create the agent
         agent = Agent(
@@ -636,7 +566,7 @@ def create_single_agent(agent_spec: Union[AgentSpec, dict]) -> Agent:
             role=agent_spec.role or "worker",
             max_loops=agent_spec.max_loops or 1,
             dynamic_temperature_enabled=True,
-            tools_list_dictionary=tools_list_dictionary,
+            # tools_list_dictionary=tools_list_dictionary,
         )
 
         logger.info("Successfully created agent: {}", agent_spec.agent_name)
@@ -763,166 +693,7 @@ def create_swarm(swarm_spec: SwarmSpec, api_key: str):
         )
 
 
-# --- RAG Pipeline Implementation ---
-# This code implements unified indexing and retrieval operations with Qdrant using LiteLLM embeddings.
-QDRANT_URL = os.getenv("QDRANT_URL")
-QDRANT_API_KEY = os.getenv("QDRANT_API_KEY")
-
-
-def rag_pipeline(
-    operation: str,
-    collection_name: str,
-    data: Optional[List[str]] = None,
-    query: Optional[str] = None,
-    vector_dim: int = 1536,
-    embedding_model: str = "text-embedding-3-small",
-) -> Union[bool, tuple, None]:
-    """Unified RAG pipeline for indexing and retrieval operations."""
-    # Fixed constants
-    C = {
-        "metric": "Cosine",
-        "chunk_size": 500,
-        "overlap": 50,
-        "batch": 50,
-        "limit": 3,
-        "threshold": 0.35,
-    }
-
-    # Helper function for API requests
-    def _req(method, path, json=None, params=None):
-        if not QDRANT_URL or not QDRANT_API_KEY:
-            return None
-        try:
-            resp = requests.request(
-                method,
-                f"{QDRANT_URL}{path}",
-                headers={"api-key": QDRANT_API_KEY, "Content-Type": "application/json"},
-                json=json,
-                params=params,
-                timeout=60,
-            )
-            resp.raise_for_status()
-            return resp.json()
-        except Exception as e:
-            print(f"Qdrant API Error: {str(e)}")
-            return None
-
-    # LiteLLM embedding function
-    def _embed(texts):
-        try:
-            response = embedding(model=embedding_model, input=texts)
-            return [item["embedding"] for item in response.data]
-        except Exception as e:
-            print(f"Embedding Error: {str(e)}")
-            return None
-
-    # INDEXING OPERATION
-    if operation == "index" and data:
-        # Ensure collection exists
-        exists = _req("GET", f"/collections/{collection_name}/exists")
-        if not exists or exists.get("status") != "ok":
-            return False
-
-        if not exists.get("result", {}).get("exists", False):
-            if not _req(
-                "PUT",
-                f"/collections/{collection_name}",
-                json={"vectors": {"size": vector_dim, "distance": C["metric"]}},
-            ):
-                return False
-
-        # Process documents into chunks
-        chunks = []
-        for doc_idx, content in enumerate(
-            [d for d in data if isinstance(d, str) and d.strip()]
-        ):
-            start, chunk_idx = 0, 0
-            while start < len(content):
-                end = min(start + C["chunk_size"], len(content))
-                chunk_text = content[start:end].strip()
-                if chunk_text:
-                    chunks.append(
-                        {
-                            "id": str(uuid4()),
-                            "text": chunk_text,
-                            "meta": {"doc_idx": doc_idx, "chunk_idx": chunk_idx},
-                        }
-                    )
-                    chunk_idx += 1
-                start = end - C["overlap"] if end - C["overlap"] > start else start + 1
-
-        if not chunks:
-            return True
-
-        # Embed and upsert in batches
-        success = True
-        for i in range(0, len(chunks), C["batch"]):
-            batch = chunks[i : i + C["batch"]]
-            batch_texts = [item["text"] for item in batch]
-            embeddings = _embed(batch_texts)
-
-            if not embeddings or len(embeddings) != len(batch):
-                success = False
-                continue
-
-            points = [
-                {
-                    "id": item["id"],
-                    "vector": emb,
-                    "payload": {"content": item["text"], "metadata": item["meta"]},
-                }
-                for item, emb in zip(batch, embeddings)
-            ]
-
-            resp = _req(
-                "PUT",
-                f"/collections/{collection_name}/points",
-                json={"points": points},
-                params={"wait": "true"},
-            )
-            if not resp or resp.get("result", {}).get("status") != "completed":
-                success = False
-
-        return success
-
-    # RETRIEVAL OPERATION
-    elif operation == "retrieve" and query:
-        query_emb = _embed([query])[0]
-        resp = _req(
-            "POST",
-            f"/collections/{collection_name}/points/query",
-            json={
-                "query": query_emb,
-                "limit": C["limit"],
-                "with_payload": True,
-                "with_vector": False,
-                "score_threshold": C["threshold"],
-            },
-        )
-
-        if not resp or resp.get("status") != "ok":
-            return None, None
-
-        results = resp.get("result", {}).get("points", [])
-        if not results:
-            return "No relevant context found.", []
-
-        context = []
-        sources = []
-        for i, doc in enumerate(results):
-            text = doc.get("payload", {}).get("content", "[Missing]")
-            meta = doc.get("payload", {}).get("metadata", {})
-            score = doc.get("score", 0.0)
-
-            context.append(f"Context {i+1} (Score: {score:.4f}):\n{text}")
-            meta["score"] = score
-            sources.append(meta)
-
-        return "\n\n---\n\n".join(context), sources
-
-    return None
-
-
+# Add this function after your get_supabase_client() function
 async def log_api_request(api_key: str, data: Dict[str, Any]) -> None:
     """
     Log API request data to Supabase swarms_api_logs table.
@@ -959,32 +730,6 @@ async def run_swarm_completion(
     try:
         swarm_name = swarm.name
 
-        # --- RAG Integration ---
-        # For each agent with rag_collection set, index the documents (if any)
-        # and then retrieve context based on the swarm task.
-        if swarm.agents:
-            for agent_spec in swarm.agents:
-                if agent_spec.rag_collection:
-                    if agent_spec.rag_documents and len(agent_spec.rag_documents) > 0:
-                        indexing_success = rag_pipeline(
-                            "index",
-                            agent_spec.rag_collection,
-                            data=agent_spec.rag_documents,
-                        )
-                        if not indexing_success:
-                            logger.error(
-                                f"Failed to index documents for collection {agent_spec.rag_collection}"
-                            )
-                    rag_context, rag_sources = rag_pipeline(
-                        "retrieve", agent_spec.rag_collection, query=swarm.task
-                    )
-                    if rag_context:
-                        agent_spec.system_prompt = (
-                            (agent_spec.system_prompt or "")
-                            + "\n\nRAG Context:\n"
-                            + rag_context
-                        )
-
         agents = swarm.agents
 
         await log_api_request(x_api_key, swarm.model_dump())
@@ -998,25 +743,7 @@ async def run_swarm_completion(
         time()
 
         try:
-            # Check for context from previous function call results
-            context = getattr(swarm, "context", None)
-
-            # Process swarm task based on context
-            if context and isinstance(context, dict) and "function_result" in context:
-                # If we have function result in the context, modify the task
-                original_task = context.get("original_query", swarm.task)
-                function_result = context["function_result"]
-                # Create a more informative task with the function result included
-                modified_task = f"Original query: {original_task}\n\nFunction returned: {function_result}\n\nPlease provide a final response based on this information."
-                swarm.task = modified_task
-
-            # Create and run the swarm
             result = create_swarm(swarm, x_api_key)
-
-            # Process any tool calls in the result
-            if isinstance(result, dict):
-                result = process_tool_calls(result)
-
         except Exception as e:
             logger.error(f"Error running swarm: {e}")
             raise HTTPException(
@@ -1031,13 +758,17 @@ async def run_swarm_completion(
         else:
             length_of_agents = len(agents)
 
+        # Job id
+        job_id = generate_key()
+
         # Format the response
         response = {
+            "job_id": job_id,
             "status": "success",
             "swarm_name": swarm_name,
             "description": swarm.description,
             "swarm_type": swarm.swarm_type,
-            "task": swarm.task,
+            # "task": swarm.task,
             "output": result,
             "number_of_agents": length_of_agents,
             # "input_config": swarm.model_dump(),
@@ -1064,44 +795,6 @@ async def run_swarm_completion(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to run swarm: {e}",
         )
-
-
-def process_tool_calls(agent_response: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    Process the tool calls in an agent's response.
-
-    Args:
-        agent_response: The raw response from the agent
-
-    Returns:
-        Processed response with tool_calls information
-    """
-    try:
-        # Check if there are tool calls in the response
-        if "tool_calls" in agent_response:
-            return agent_response
-
-        # Check for function_call in the response (for backward compatibility)
-        if "function_call" in agent_response:
-            function_call = agent_response["function_call"]
-            # Convert to tool_calls format
-            tool_calls = [
-                {
-                    "id": str(uuid4()),
-                    "type": "function",
-                    "function": {
-                        "name": function_call.get("name", ""),
-                        "arguments": function_call.get("arguments", "{}"),
-                    },
-                }
-            ]
-            agent_response["tool_calls"] = tool_calls
-
-        return agent_response
-
-    except Exception as e:
-        logger.error(f"Error processing tool calls: {str(e)}")
-        return agent_response
 
 
 def deduct_credits(api_key: str, amount: float, product_name: str) -> None:
@@ -1316,121 +1009,6 @@ def calculate_swarm_cost(
         raise ValueError(f"Failed to calculate swarm cost: {str(e)}")
 
 
-def calculate_agent_cost(
-    agent: Agent,
-    input_text: str,
-    execution_time: float,
-    agent_output: Union[Any, Dict[str, Any]],
-) -> Dict[str, Any]:
-    """
-    Calculate the cost of running a single agent based on tokens and execution time.
-    Uses the same pricing logic as swarm calculations.
-
-    Args:
-        agent: The agent used
-        input_text: The input task/prompt text
-        execution_time: Time taken to execute in seconds
-        agent_output: Output text from the agent or a dictionary
-
-    Returns:
-        Dict containing cost breakdown and total cost
-    """
-    # Base costs per unit (matching swarm costs)
-    COST_PER_AGENT = 0.01  # Base cost per agent
-    COST_PER_1M_INPUT_TOKENS = 2.00  # Cost per 1M input tokens
-    COST_PER_1M_OUTPUT_TOKENS = 4.50  # Cost per 1M output tokens
-
-    # Get current time in California timezone
-    california_tz = pytz.timezone("America/Los_Angeles")
-    current_time = datetime.now(california_tz)
-    is_night_time = current_time.hour >= 20 or current_time.hour < 6  # 8 PM to 6 AM
-
-    try:
-        # Calculate input tokens for task
-        task_tokens = count_tokens(input_text)
-
-        # Calculate total input tokens including system prompt and memory
-        total_input_tokens = task_tokens
-
-        # Add system prompt tokens if present
-        if agent.system_prompt:
-            total_input_tokens += count_tokens(agent.system_prompt)
-
-        # Add memory tokens if available
-        try:
-            memory = agent.short_memory.return_history_as_string()
-            if memory:
-                memory_tokens = count_tokens(str(memory))
-                total_input_tokens += memory_tokens
-        except Exception as e:
-            logger.warning(
-                f"Could not get memory for agent {agent.agent_name}: {str(e)}"
-            )
-
-        # Calculate output tokens
-        if agent_output:
-            if isinstance(agent_output, dict):
-                total_output_tokens = count_tokens(any_to_str(agent_output))
-            elif isinstance(agent_output, str):
-                total_output_tokens = count_tokens(agent_output)
-            else:
-                total_output_tokens = count_tokens(any_to_str(agent_output))
-
-        # Calculate costs (convert to millions of tokens)
-        agent_cost = COST_PER_AGENT
-        input_token_cost = (total_input_tokens / 1_000_000) * COST_PER_1M_INPUT_TOKENS
-        output_token_cost = (
-            total_output_tokens / 1_000_000
-        ) * COST_PER_1M_OUTPUT_TOKENS
-
-        # Apply discount during California night time hours
-        if is_night_time:
-            input_token_cost *= 0.25  # 75% discount
-            output_token_cost *= 0.25  # 75% discount
-
-        # Calculate total cost
-        total_cost = agent_cost + input_token_cost + output_token_cost
-
-        return {
-            "cost_breakdown": {
-                "agent_cost": round(agent_cost, 6),
-                "input_token_cost": round(input_token_cost, 6),
-                "output_token_cost": round(output_token_cost, 6),
-                "token_counts": {
-                    "input_tokens": total_input_tokens,
-                    "output_tokens": total_output_tokens,
-                    "total_tokens": total_input_tokens + total_output_tokens,
-                },
-                "execution_time_seconds": round(execution_time, 2),
-            },
-            "total_cost": round(total_cost, 6),
-        }
-
-    except Exception as e:
-        logger.error(f"Error calculating agent cost: {str(e)}")
-        raise ValueError(f"Failed to calculate agent cost: {str(e)}")
-
-
-# async def auto_generate_agents(request: AutoGenerateAgentsSpec):
-#     """
-#     Automatically generate agents for a given task.
-#     """
-#     agents_builder = AgentsBuilder(return_dictionary=True)
-
-#     start_time = time()
-#     agents = await asyncio.to_thread(agents_builder.run, task=request.task)
-#     end_time = time()
-
-#     calculate_swarm_cost(
-#         agents=agents_builder,
-#         input_text=request.task + agents_builder.system_prompt,
-#         execution_time=end_time - start_time,
-#         agent_outputs=any_to_str(agents),
-#     )
-
-#     return agents
-
-
 async def get_swarm_types() -> List[str]:
     """Returns a list of available swarm types"""
     return [
@@ -1564,54 +1142,6 @@ async def telemetry_middleware(request: Request, call_next):
         raise  # Re-raise the original exception
 
 
-async def agent_completion(agent: AgentCompletion, x_api_key: str = Header(...)):
-    """
-    Run an agent with the specified task.
-    """
-
-    agent_instance = create_single_agent(agent.agent)
-    agent_instance.output_type = agent.output_type.lower()
-    start_time = time()
-
-    logger.info(
-        f"Starting to run agent: {agent_instance.agent_name} with task: {agent.task}"
-    )
-
-    try:
-        result = await agent_instance.run(task=agent.task)
-        logger.info(
-            f"Successfully ran agent: {agent_instance.agent_name} with task: {agent.task}"
-        )
-    except Exception as e:
-        logger.error(f"Error running agent {agent_instance.agent_name}: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to run the agent.",
-        )
-
-    end_time = time() - start_time
-    logger.info(
-        f"Agent {agent_instance.agent_name} completed in {end_time:.2f} seconds"
-    )
-
-    cost = calculate_agent_cost(agent_instance, agent.task, end_time, result)
-
-    # Deduct credits
-    deduct_credits(
-        x_api_key,
-        cost["total_cost"],
-        f"agent_execution_{agent_instance.agent_name}",
-    )
-
-    return AgentCompletionResponse(
-        agent_id=agent_instance.id,
-        agent_name=agent_instance.agent_name,
-        agent_description=agent_instance.description,
-        messages=result,
-        cost=cost,
-    )
-
-
 @app.get("/health")
 def health():
     return {"status": "ok"}
@@ -1621,29 +1151,18 @@ def health():
     "/v1/swarms/available",
     dependencies=[Depends(rate_limiter)],
 )
-async def check_swarm_types() -> Dict[str, Any]:
+async def check_swarm_types() -> Dict[Any, Any]:
     """
     Check the available swarm types.
     """
+    swarm_types = get_swarm_types()
+
     out = {
         "success": True,
-        "swarm_types": get_swarm_types(),
+        "swarm_types": swarm_types,
     }
 
     return out
-
-
-@app.post(
-    "/v1/agent/completions",
-    dependencies=[
-        Depends(verify_api_key),
-        Depends(rate_limiter),
-    ],
-)
-async def run_agent(
-    agent: AgentCompletion, x_api_key=Header(...)
-) -> AgentCompletionResponse:
-    return await agent_completion(agent, x_api_key)
 
 
 @app.post(
@@ -1755,160 +1274,160 @@ async def get_available_models() -> Dict[str, Any]:
     return out
 
 
-@app.post(
-    "/v1/swarm/schedule",
-    dependencies=[
-        Depends(verify_api_key),
-        Depends(rate_limiter),
-    ],
-)
-async def schedule_swarm(
-    swarm: SwarmSpec, x_api_key: str = Header(...)
-) -> Dict[str, Any]:
-    """
-    Schedule a swarm to run at a specific time.
-    """
-    if not swarm.schedule:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Schedule information is required",
-        )
+# @app.post(
+#     "/v1/swarm/schedule",
+#     dependencies=[
+#         Depends(verify_api_key),
+#         Depends(rate_limiter),
+#     ],
+# )
+# async def schedule_swarm(
+#     swarm: SwarmSpec, x_api_key: str = Header(...)
+# ) -> Dict[str, Any]:
+#     """
+#     Schedule a swarm to run at a specific time.
+#     """
+#     if not swarm.schedule:
+#         raise HTTPException(
+#             status_code=status.HTTP_400_BAD_REQUEST,
+#             detail="Schedule information is required",
+#         )
 
-    try:
-        # Generate a unique job ID
-        job_id = f"swarm_{swarm.name}_{int(time())}"
+#     try:
+#         # Generate a unique job ID
+#         job_id = f"swarm_{swarm.name}_{int(time())}"
 
-        # Create and start the scheduled job
-        job = ScheduledJob(
-            job_id=job_id,
-            scheduled_time=swarm.schedule.scheduled_time,
-            swarm=swarm,
-            api_key=x_api_key,
-        )
-        job.start()
+#         # Create and start the scheduled job
+#         job = ScheduledJob(
+#             job_id=job_id,
+#             scheduled_time=swarm.schedule.scheduled_time,
+#             swarm=swarm,
+#             api_key=x_api_key,
+#         )
+#         job.start()
 
-        # Store the job information
-        scheduled_jobs[job_id] = {
-            "job": job,
-            "swarm_name": swarm.name,
-            "scheduled_time": swarm.schedule.scheduled_time,
-            "timezone": swarm.schedule.timezone,
-        }
+#         # Store the job information
+#         scheduled_jobs[job_id] = {
+#             "job": job,
+#             "swarm_name": swarm.name,
+#             "scheduled_time": swarm.schedule.scheduled_time,
+#             "timezone": swarm.schedule.timezone,
+#         }
 
-        # Log the scheduling
-        await log_api_request(
-            x_api_key,
-            {
-                "action": "schedule_swarm",
-                "swarm_name": swarm.name,
-                "scheduled_time": swarm.schedule.scheduled_time.isoformat(),
-                "job_id": job_id,
-            },
-        )
+#         # Log the scheduling
+#         await log_api_request(
+#             x_api_key,
+#             {
+#                 "action": "schedule_swarm",
+#                 "swarm_name": swarm.name,
+#                 "scheduled_time": swarm.schedule.scheduled_time.isoformat(),
+#                 "job_id": job_id,
+#             },
+#         )
 
-        return {
-            "status": "success",
-            "message": "Swarm scheduled successfully",
-            "job_id": job_id,
-            "scheduled_time": swarm.schedule.scheduled_time,
-            "timezone": swarm.schedule.timezone,
-        }
+#         return {
+#             "status": "success",
+#             "message": "Swarm scheduled successfully",
+#             "job_id": job_id,
+#             "scheduled_time": swarm.schedule.scheduled_time,
+#             "timezone": swarm.schedule.timezone,
+#         }
 
-    except Exception as e:
-        logger.error(f"Error scheduling swarm: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to schedule swarm: {str(e)}",
-        )
-
-
-@app.get(
-    "/v1/swarm/schedule",
-    dependencies=[
-        Depends(verify_api_key),
-        Depends(rate_limiter),
-    ],
-)
-async def get_scheduled_jobs(x_api_key: str = Header(...)) -> Dict[str, Any]:
-    """
-    Get all scheduled swarm jobs.
-    """
-    try:
-        jobs_list = []
-        current_time = datetime.now(pytz.UTC)
-
-        # Clean up completed jobs
-        completed_jobs = [
-            job_id
-            for job_id, job_info in scheduled_jobs.items()
-            if current_time >= job_info["scheduled_time"]
-        ]
-        for job_id in completed_jobs:
-            scheduled_jobs.pop(job_id, None)
-
-        # Get active jobs
-        for job_id, job_info in scheduled_jobs.items():
-            jobs_list.append(
-                {
-                    "job_id": job_id,
-                    "swarm_name": job_info["swarm_name"],
-                    "scheduled_time": job_info["scheduled_time"].isoformat(),
-                    "timezone": job_info["timezone"],
-                }
-            )
-
-        return {"status": "success", "scheduled_jobs": jobs_list}
-
-    except Exception as e:
-        logger.error(f"Error retrieving scheduled jobs: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to retrieve scheduled jobs: {str(e)}",
-        )
+#     except Exception as e:
+#         logger.error(f"Error scheduling swarm: {str(e)}")
+#         raise HTTPException(
+#             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+#             detail=f"Failed to schedule swarm: {str(e)}",
+#         )
 
 
-@app.delete(
-    "/v1/swarm/schedule/{job_id}",
-    dependencies=[
-        Depends(verify_api_key),
-        Depends(rate_limiter),
-    ],
-)
-async def cancel_scheduled_job(
-    job_id: str, x_api_key: str = Header(...)
-) -> Dict[str, Any]:
-    """
-    Cancel a scheduled swarm job.
-    """
-    try:
-        if job_id not in scheduled_jobs:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND, detail="Scheduled job not found"
-            )
+# @app.get(
+#     "/v1/swarm/schedule",
+#     dependencies=[
+#         Depends(verify_api_key),
+#         Depends(rate_limiter),
+#     ],
+# )
+# async def get_scheduled_jobs(x_api_key: str = Header(...)) -> Dict[str, Any]:
+#     """
+#     Get all scheduled swarm jobs.
+#     """
+#     try:
+#         jobs_list = []
+#         current_time = datetime.now(pytz.UTC)
 
-        # Cancel and remove the job
-        job_info = scheduled_jobs[job_id]
-        job_info["job"].cancelled = True
-        scheduled_jobs.pop(job_id)
+#         # Clean up completed jobs
+#         completed_jobs = [
+#             job_id
+#             for job_id, job_info in scheduled_jobs.items()
+#             if current_time >= job_info["scheduled_time"]
+#         ]
+#         for job_id in completed_jobs:
+#             scheduled_jobs.pop(job_id, None)
 
-        await log_api_request(
-            x_api_key, {"action": "cancel_scheduled_job", "job_id": job_id}
-        )
+#         # Get active jobs
+#         for job_id, job_info in scheduled_jobs.items():
+#             jobs_list.append(
+#                 {
+#                     "job_id": job_id,
+#                     "swarm_name": job_info["swarm_name"],
+#                     "scheduled_time": job_info["scheduled_time"].isoformat(),
+#                     "timezone": job_info["timezone"],
+#                 }
+#             )
 
-        return {
-            "status": "success",
-            "message": "Scheduled job cancelled successfully",
-            "job_id": job_id,
-        }
+#         return {"status": "success", "scheduled_jobs": jobs_list}
 
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error cancelling scheduled job: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to cancel scheduled job: {str(e)}",
-        )
+#     except Exception as e:
+#         logger.error(f"Error retrieving scheduled jobs: {str(e)}")
+#         raise HTTPException(
+#             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+#             detail=f"Failed to retrieve scheduled jobs: {str(e)}",
+#         )
+
+
+# @app.delete(
+#     "/v1/swarm/schedule/{job_id}",
+#     dependencies=[
+#         Depends(verify_api_key),
+#         Depends(rate_limiter),
+#     ],
+# )
+# async def cancel_scheduled_job(
+#     job_id: str, x_api_key: str = Header(...)
+# ) -> Dict[str, Any]:
+#     """
+#     Cancel a scheduled swarm job.
+#     """
+#     try:
+#         if job_id not in scheduled_jobs:
+#             raise HTTPException(
+#                 status_code=status.HTTP_404_NOT_FOUND, detail="Scheduled job not found"
+#             )
+
+#         # Cancel and remove the job
+#         job_info = scheduled_jobs[job_id]
+#         job_info["job"].cancelled = True
+#         scheduled_jobs.pop(job_id)
+
+#         await log_api_request(
+#             x_api_key, {"action": "cancel_scheduled_job", "job_id": job_id}
+#         )
+
+#         return {
+#             "status": "success",
+#             "message": "Scheduled job cancelled successfully",
+#             "job_id": job_id,
+#         }
+
+#     except HTTPException:
+#         raise
+#     except Exception as e:
+#         logger.error(f"Error cancelling scheduled job: {str(e)}")
+#         raise HTTPException(
+#             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+#             detail=f"Failed to cancel scheduled job: {str(e)}",
+#         )
 
 
 # --- Main Entrypoint ---
