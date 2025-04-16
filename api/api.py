@@ -46,39 +46,6 @@ from swarms.utils.any_to_str import any_to_str
 from swarms.utils.litellm_tokenizer import count_tokens
 
 
-# --- Async generator to stream a dictionary as NDJSON ---
-async def async_stream_dict(
-    data: Dict[str, Any], delay: float = 0.0
-) -> AsyncGenerator[str, None]:
-    for key, value in data.items():
-        if delay:
-            await asyncio.sleep(delay)  # Optional delay per key
-        yield json.dumps({key: value}) + "\n"
-
-
-# --- Function to streamify any async function that returns a dict ---
-def async_streamify_dict(
-    fn: Callable[..., Awaitable[Dict[str, Any]]], *args, delay: float = 0.0, **kwargs
-) -> StreamingResponse:
-    """
-    Call an async function that returns a dict and stream it as NDJSON.
-
-    Args:
-        fn: An async function returning a dictionary.
-        delay: Optional delay between streamed items.
-        *args/**kwargs: Arguments passed to the function.
-
-    Returns:
-        StreamingResponse with NDJSON.
-    """
-
-    async def generator():
-        data = await fn(*args, **kwargs)
-        async for chunk in async_stream_dict(data, delay):
-            yield chunk
-
-    return StreamingResponse(generator(), media_type="application/x-ndjson")
-
 
 load_dotenv()
 
@@ -1176,12 +1143,13 @@ async def run_swarm(swarm: SwarmSpec, x_api_key=Header(...)) -> Dict[str, Any]:
     """
     Run a swarm with the specified task.
     """
-    # return await run_swarm_completion(swarm, x_api_key)
-
-    if swarm.stream is True:
-        return async_streamify_dict(run_swarm_completion)(swarm, x_api_key)
-    else:
+    try:
         return await run_swarm_completion(swarm, x_api_key)
+    except Exception as e:
+        logger.error(f"Error running swarm: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)
+        )
 
 
 @app.post(
