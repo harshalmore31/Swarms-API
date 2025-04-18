@@ -95,12 +95,15 @@ def rate_limiter(request: Request):
 
 class AgentSpec(BaseModel):
     agent_name: Optional[str] = Field(
+        default=f"{generate_key("agent")}",
         description="The unique name assigned to the agent, which identifies its role and functionality within the swarm.",
     )
     description: Optional[str] = Field(
+        default=None,
         description="A detailed explanation of the agent's purpose, capabilities, and any specific tasks it is designed to perform.",
     )
     system_prompt: Optional[str] = Field(
+        default=None,
         description="The initial instruction or context provided to the agent, guiding its behavior and responses during execution.",
     )
     model_name: Optional[str] = Field(
