@@ -1,4 +1,3 @@
-import asyncio
 import os
 import platform
 import secrets
@@ -129,8 +128,12 @@ class AgentSpec(BaseModel):
         description="The maximum number of times the agent is allowed to repeat its task, enabling iterative processing if necessary.",
     )
     tools_dictionary: Optional[List[Dict[str, Any]]] = Field(
+        default=None,
         description="A dictionary of tools that the agent can use to complete its task."
     )
+    # mcp_servers: Optional[str] = Field(
+    #     description="A list of MCP servers that the agent can use to complete its task."
+    # )
 
 
 class Agents(BaseModel):
@@ -141,13 +144,12 @@ class Agents(BaseModel):
     )
 
 
-
 class MCPConfig(BaseModel):
     url: str = Field(
         ...,
         description="The URL of the MCP server.",
     )
-    method: Optional[Literal["stdio", 'sse']] = Field(
+    method: Optional[Literal["stdio", "sse"]] = Field(
         "sse",
         description="The method to use for the request. stdio is for standard input/output, sse is for server-sent events.",
     )
@@ -155,15 +157,15 @@ class MCPConfig(BaseModel):
         None,
         description="The parameters to include in the request.",
     )
-    
-    
+
+
 class MultipleMCPConfig(BaseModel):
     configs: List[MCPConfig] = Field(
         ...,
         description="A list of MCP configurations.",
     )
-    
-    
+
+
 class ScheduleSpec(BaseModel):
     scheduled_time: datetime = Field(
         ...,
@@ -469,6 +471,7 @@ def create_single_agent(agent_spec: Union[AgentSpec, dict]) -> Agent:
             max_loops=agent_spec.max_loops or 1,
             dynamic_temperature_enabled=True,
             tools_list_dictionary=agent_spec.tools_dictionary,
+            # mcp_servers=agent_spec.mcp_servers,
         )
 
         logger.info("Successfully created agent: {}", agent_spec.agent_name)
