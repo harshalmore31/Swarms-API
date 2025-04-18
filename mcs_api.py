@@ -41,6 +41,7 @@ def run_single_swarm():
                 "max_tokens": 8192,
                 "temperature": 0.5,
                 "auto_generate_prompt": False,
+                # "tools_dictionary": None,
             },
             {
                 "agent_name": "Medical Researcher",
@@ -58,6 +59,7 @@ def run_single_swarm():
                 "max_tokens": 8192,
                 "temperature": 0.5,
                 "auto_generate_prompt": False,
+                # "tools_dictionary": None,
             },
         ],
         "max_loops": 1,
@@ -78,13 +80,6 @@ def run_single_swarm():
     output = response.json()
 
     return json.dumps(output, indent=4)
-
-
-def get_logs():
-    response = requests.get(f"{BASE_URL}/v1/swarm/logs", headers=headers)
-    output = response.json()
-    # return json.dumps(output, indent=4)
-    return output
 
 
 if __name__ == "__main__":

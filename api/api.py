@@ -13,7 +13,6 @@ from typing import (
     Any,
     Dict,
     List,
-    Literal,
     Optional,
     Union,
 )
@@ -138,34 +137,15 @@ class AgentSpec(BaseModel):
     #     description="A list of MCP servers that the agent can use to complete its task."
     # )
 
+    class Config:
+        arbitrary_types_allowed = True
+
 
 class Agents(BaseModel):
     """Configuration for a collection of agents that work together as a swarm to accomplish tasks."""
 
     agents: List[AgentSpec] = Field(
         description="A list containing the specifications of each agent that will participate in the swarm, detailing their roles and functionalities."
-    )
-
-
-class MCPConfig(BaseModel):
-    url: str = Field(
-        ...,
-        description="The URL of the MCP server.",
-    )
-    method: Optional[Literal["stdio", "sse"]] = Field(
-        "sse",
-        description="The method to use for the request. stdio is for standard input/output, sse is for server-sent events.",
-    )
-    parameters: Optional[Dict[str, Any]] = Field(
-        None,
-        description="The parameters to include in the request.",
-    )
-
-
-class MultipleMCPConfig(BaseModel):
-    configs: List[MCPConfig] = Field(
-        ...,
-        description="A list of MCP configurations.",
     )
 
 
@@ -238,6 +218,9 @@ class SwarmSpec(BaseModel):
         False,
         description="A flag indicating whether the swarm should stream its output.",
     )
+
+    class Config:
+        arbitrary_types_allowed = True
 
 
 async def capture_telemetry(request: Request) -> Dict[str, Any]:
