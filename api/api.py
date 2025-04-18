@@ -92,7 +92,6 @@ def rate_limiter(request: Request):
         )
 
 
-
 class AgentSpec(BaseModel):
     agent_name: Optional[str] = Field(
         # default=None,
@@ -445,10 +444,10 @@ def create_single_agent(agent_spec: Union[AgentSpec, dict]) -> Agent:
         # else:
         #     tools_list_dictionary = None
 
-        if agent_spec.tools_dictionary is not None:
-            output_type = "dict"
-        else:
-            output_type = "str"
+        # if agent_spec.tools_dictionary is not None:
+        #     output_type = "dict"
+        # else:
+        #     output_type = "final"
 
         # Create the agent
         agent = Agent(
@@ -463,7 +462,7 @@ def create_single_agent(agent_spec: Union[AgentSpec, dict]) -> Agent:
             max_loops=agent_spec.max_loops or 1,
             dynamic_temperature_enabled=True,
             tools_list_dictionary=agent_spec.tools_dictionary,
-            output_type=output_type,
+            output_type="dict-all-except-first",
         )
 
         logger.info("Successfully created agent: {}", agent_spec.agent_name)
