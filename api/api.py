@@ -132,7 +132,7 @@ class AgentSpec(BaseModel):
     )
     tools_dictionary: Optional[List[Dict[str, Any]]] = Field(
         default=None,
-        description="A dictionary of tools that the agent can use to complete its task."
+        description="A dictionary of tools that the agent can use to complete its task.",
     )
     # mcp_servers: Optional[str] = Field(
     #     description="A list of MCP servers that the agent can use to complete its task."
@@ -461,6 +461,11 @@ def create_single_agent(agent_spec: Union[AgentSpec, dict]) -> Agent:
         # else:
         #     tools_list_dictionary = None
 
+        if agent_spec.tools_dictionary is not None:
+            output_type = "dict"
+        else:
+            output_type = "str"
+
         # Create the agent
         agent = Agent(
             agent_name=agent_spec.agent_name,
@@ -474,7 +479,7 @@ def create_single_agent(agent_spec: Union[AgentSpec, dict]) -> Agent:
             max_loops=agent_spec.max_loops or 1,
             dynamic_temperature_enabled=True,
             tools_list_dictionary=agent_spec.tools_dictionary,
-            # mcp_servers=agent_spec.mcp_servers,
+            output_type=output_type,
         )
 
         logger.info("Successfully created agent: {}", agent_spec.agent_name)
