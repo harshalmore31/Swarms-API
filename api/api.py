@@ -1,5 +1,4 @@
 import asyncio
-import json
 import os
 import platform
 import secrets
@@ -7,18 +6,15 @@ import socket
 import string
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import datetime
+from datetime import UTC, datetime
 from decimal import Decimal
 from functools import lru_cache
-from threading import Thread
-from time import sleep, time
+from time import time
 from typing import (
     Any,
-    AsyncGenerator,
-    Awaitable,
-    Callable,
     Dict,
     List,
+    Literal,
     Optional,
     Union,
 )
@@ -37,15 +33,12 @@ from fastapi import (
     status,
 )
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
 from litellm import model_list
 from loguru import logger
 from pydantic import BaseModel, Field
 from swarms import Agent, SwarmRouter, SwarmType
 from swarms.utils.any_to_str import any_to_str
 from swarms.utils.litellm_tokenizer import count_tokens
-
-
 
 load_dotenv()
 
@@ -65,9 +58,9 @@ app = FastAPI(
 )
 
 
-async def _generate_key(prefix: str = "swarms") -> str:
+def generate_key(prefix: str = "swarms") -> str:
     """
-    Asynchronously generates an API key similar to OpenAI's format (sk-XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX).
+    Generates an API key similar to OpenAI's format (sk-XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX).
 
     Args:
         prefix (str): The prefix for the API key. Defaults to "sk".
@@ -75,18 +68,10 @@ async def _generate_key(prefix: str = "swarms") -> str:
     Returns:
         str: An API key string in format: prefix-<48 random characters>
     """
-
-    def generate():
-        # Create random string of letters and numbers
-        alphabet = string.ascii_letters + string.digits
-        random_part = "".join(secrets.choice(alphabet) for _ in range(28))
-        return f"{prefix}-{random_part}"
-
-    return await asyncio.to_thread(generate)
-
-
-def generate_key() -> str:
-    return asyncio.run(_generate_key())
+    # Create random string of letters and numbers
+    alphabet = string.ascii_letters + string.digits
+    random_part = "".join(secrets.choice(alphabet) for _ in range(28))
+    return f"{prefix}-{random_part}"
 
 
 def rate_limiter(request: Request):
@@ -107,41 +92,6 @@ def rate_limiter(request: Request):
         raise HTTPException(
             status_code=429, detail="Rate limit exceeded. Please try again later."
         )
-
-
-class MCPConfig(BaseModel):
-    """
-    Configuration for a single MCP (Model Configuration Parameter).
-
-    Attributes:
-        url (Optional[str]): The endpoint URL for the MCP.
-        parameters (Dict[str, Any]): A dictionary of parameters to be passed to the MCP.
-        types (str): The type of the MCP, indicating its functionality or category.
-        docs (str): Documentation or description of the MCP's purpose and usage.
-    """
-
-    url: Optional[str] = Field(None, description="The endpoint URL for the MCP.")
-    parameters: Dict[str, Any] = Field(
-        ..., description="A dictionary of parameters to be passed to the MCP."
-    )
-    types: str = Field(
-        ...,
-        description="The type of the MCP, indicating its functionality or category.",
-    )
-    docs: str = Field(
-        ..., description="Documentation or description of the MCP's purpose and usage."
-    )
-
-
-class MultipleMCPConfig(BaseModel):
-    """
-    Configuration for multiple MCPs (Model Configuration Parameters).
-
-    Attributes:
-        mcps_list (List[MCPConfig]): A list of MCP configurations.
-    """
-
-    mcps_list: List[MCPConfig] = Field(..., description="A list of MCP configurations.")
 
 
 class AgentSpec(BaseModel):
@@ -178,9 +128,9 @@ class AgentSpec(BaseModel):
         default=1,
         description="The maximum number of times the agent is allowed to repeat its task, enabling iterative processing if necessary.",
     )
-    # tools_dictionary: Optional[List[Dict[str, Any]]] = Field(
-    #     description="A dictionary of tools that the agent can use to complete its task."
-    # )
+    tools_dictionary: Optional[List[Dict[str, Any]]] = Field(
+        description="A dictionary of tools that the agent can use to complete its task."
+    )
 
 
 class Agents(BaseModel):
@@ -191,6 +141,29 @@ class Agents(BaseModel):
     )
 
 
+
+class MCPConfig(BaseModel):
+    url: str = Field(
+        ...,
+        description="The URL of the MCP server.",
+    )
+    method: Optional[Literal["stdio", 'sse']] = Field(
+        "sse",
+        description="The method to use for the request. stdio is for standard input/output, sse is for server-sent events.",
+    )
+    parameters: Optional[Dict[str, Any]] = Field(
+        None,
+        description="The parameters to include in the request.",
+    )
+    
+    
+class MultipleMCPConfig(BaseModel):
+    configs: List[MCPConfig] = Field(
+        ...,
+        description="A list of MCP configurations.",
+    )
+    
+    
 class ScheduleSpec(BaseModel):
     scheduled_time: datetime = Field(
         ...,
@@ -256,48 +229,10 @@ class SwarmSpec(BaseModel):
         None,
         description="A list of messages that the swarm should complete.",
     )
-    # rag_on: Optional[bool] = Field(
-    #     None,
-    #     description="A flag indicating whether the swarm should use RAG.",
-    # )
-    # collection_name: Optional[str] = Field(
-    #     None,
-    #     description="The name of the collection to use for RAG.",
-    # )
     stream: Optional[bool] = Field(
         False,
         description="A flag indicating whether the swarm should stream its output.",
     )
-
-
-class ScheduledJob(Thread):
-    def __init__(
-        self, job_id: str, scheduled_time: datetime, swarm: SwarmSpec, api_key: str
-    ):
-        super().__init__()
-        self.job_id = job_id
-        self.scheduled_time = scheduled_time
-        self.swarm = swarm
-        self.api_key = api_key
-        self.daemon = True  # Allow the thread to be terminated when main program exits
-        self.cancelled = False
-
-    def run(self):
-        while not self.cancelled:
-            now = datetime.now(pytz.UTC)
-            if now >= self.scheduled_time:
-                try:
-                    # Execute the swarm
-                    asyncio.run(run_swarm_completion(self.swarm, self.api_key))
-                except Exception as e:
-                    logger.error(
-                        f"Error executing scheduled swarm {self.job_id}: {str(e)}"
-                    )
-                finally:
-                    # Remove the job from scheduled_jobs after execution
-                    scheduled_jobs.pop(self.job_id, None)
-                break
-            sleep(1)  # Check every second
 
 
 async def capture_telemetry(request: Request) -> Dict[str, Any]:
@@ -332,7 +267,7 @@ async def capture_telemetry(request: Request) -> Dict[str, Any]:
 
         telemetry = {
             "request_id": str(uuid4()),
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
             # Request data
             "method": request.method,
             "path": str(request.url.path),
@@ -363,7 +298,7 @@ async def capture_telemetry(request: Request) -> Dict[str, Any]:
         logger.error(f"Error capturing telemetry: {str(e)}")
         return {
             "error": "Failed to capture complete telemetry",
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
         }
 
 
@@ -533,7 +468,7 @@ def create_single_agent(agent_spec: Union[AgentSpec, dict]) -> Agent:
             role=agent_spec.role or "worker",
             max_loops=agent_spec.max_loops or 1,
             dynamic_temperature_enabled=True,
-            # tools_list_dictionary=tools_list_dictionary,
+            tools_list_dictionary=agent_spec.tools_dictionary,
         )
 
         logger.info("Successfully created agent: {}", agent_spec.agent_name)
@@ -624,15 +559,20 @@ def create_swarm(swarm_spec: SwarmSpec, api_key: str):
         # Calculate costs and execute
         start_time = time()
 
-        if task is not None:
-            output = swarm.run(task=task)
-        elif tasks is not None:
-            output = swarm.batch_run(tasks=tasks)
-        else:
-            output = swarm.run(task=task)
+        output = (
+            swarm.run(task=task)
+            if task is not None
+            else (
+                swarm.batch_run(tasks=tasks)
+                if tasks is not None
+                else swarm.run(task=task)
+            )
+        )
 
         # Calculate execution time and costs
         execution_time = time() - start_time
+
+        # Calculate costs
         cost_info = calculate_swarm_cost(
             agents=agents,
             input_text=swarm_spec.task,
@@ -707,8 +647,6 @@ async def run_swarm_completion(
         # Create and run the swarm
         logger.debug(f"Creating swarm object for {swarm_name}")
 
-        time()
-
         try:
             result = create_swarm(swarm, x_api_key)
         except Exception as e:
@@ -747,7 +685,7 @@ async def run_swarm_completion(
         if swarm.messages is not None:
             response["messages"] = swarm.messages
 
-        logger.info(response)
+        # logger.info(response)
         await log_api_request(x_api_key, response)
 
         return response
@@ -1034,7 +972,7 @@ async def telemetry_middleware(request: Request, call_next):
     # Add request start time
     telemetry["request_timing"] = {
         "start_time": start_time,
-        "start_timestamp": datetime.utcnow().isoformat(),
+        "start_timestamp": datetime.now(UTC).isoformat(),
     }
 
     # Store telemetry in request state for access in route handlers
@@ -1069,7 +1007,7 @@ async def telemetry_middleware(request: Request, call_next):
                         "telemetry": telemetry,
                         "path": str(request.url.path),
                         "method": request.method,
-                        "timestamp": datetime.utcnow().isoformat(),
+                        "timestamp": datetime.now(UTC).isoformat(),
                     },
                 )
             except Exception as e:
@@ -1099,7 +1037,7 @@ async def telemetry_middleware(request: Request, call_next):
                         "telemetry": telemetry,
                         "path": str(request.url.path),
                         "method": request.method,
-                        "timestamp": datetime.utcnow().isoformat(),
+                        "timestamp": datetime.now(UTC).isoformat(),
                         "error": True,
                     },
                 )
@@ -1217,7 +1155,12 @@ async def get_logs(x_api_key: str = Header(...)) -> Dict[str, Any]:
     """
     try:
         logs = await get_api_key_logs(x_api_key)
-        return {"status": "success", "count": len(logs), "logs": logs}
+        return {
+            "status": "success",
+            "count": len(logs),
+            "logs": logs,
+            "timestamp": datetime.now(UTC).isoformat(),
+        }
     except Exception as e:
         logger.error(f"Error in get_logs endpoint: {str(e)}")
         raise HTTPException(
@@ -1240,162 +1183,6 @@ async def get_available_models() -> Dict[str, Any]:
         "models": model_list,
     }
     return out
-
-
-# @app.post(
-#     "/v1/swarm/schedule",
-#     dependencies=[
-#         Depends(verify_api_key),
-#         Depends(rate_limiter),
-#     ],
-# )
-# async def schedule_swarm(
-#     swarm: SwarmSpec, x_api_key: str = Header(...)
-# ) -> Dict[str, Any]:
-#     """
-#     Schedule a swarm to run at a specific time.
-#     """
-#     if not swarm.schedule:
-#         raise HTTPException(
-#             status_code=status.HTTP_400_BAD_REQUEST,
-#             detail="Schedule information is required",
-#         )
-
-#     try:
-#         # Generate a unique job ID
-#         job_id = f"swarm_{swarm.name}_{int(time())}"
-
-#         # Create and start the scheduled job
-#         job = ScheduledJob(
-#             job_id=job_id,
-#             scheduled_time=swarm.schedule.scheduled_time,
-#             swarm=swarm,
-#             api_key=x_api_key,
-#         )
-#         job.start()
-
-#         # Store the job information
-#         scheduled_jobs[job_id] = {
-#             "job": job,
-#             "swarm_name": swarm.name,
-#             "scheduled_time": swarm.schedule.scheduled_time,
-#             "timezone": swarm.schedule.timezone,
-#         }
-
-#         # Log the scheduling
-#         await log_api_request(
-#             x_api_key,
-#             {
-#                 "action": "schedule_swarm",
-#                 "swarm_name": swarm.name,
-#                 "scheduled_time": swarm.schedule.scheduled_time.isoformat(),
-#                 "job_id": job_id,
-#             },
-#         )
-
-#         return {
-#             "status": "success",
-#             "message": "Swarm scheduled successfully",
-#             "job_id": job_id,
-#             "scheduled_time": swarm.schedule.scheduled_time,
-#             "timezone": swarm.schedule.timezone,
-#         }
-
-#     except Exception as e:
-#         logger.error(f"Error scheduling swarm: {str(e)}")
-#         raise HTTPException(
-#             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-#             detail=f"Failed to schedule swarm: {str(e)}",
-#         )
-
-
-# @app.get(
-#     "/v1/swarm/schedule",
-#     dependencies=[
-#         Depends(verify_api_key),
-#         Depends(rate_limiter),
-#     ],
-# )
-# async def get_scheduled_jobs(x_api_key: str = Header(...)) -> Dict[str, Any]:
-#     """
-#     Get all scheduled swarm jobs.
-#     """
-#     try:
-#         jobs_list = []
-#         current_time = datetime.now(pytz.UTC)
-
-#         # Clean up completed jobs
-#         completed_jobs = [
-#             job_id
-#             for job_id, job_info in scheduled_jobs.items()
-#             if current_time >= job_info["scheduled_time"]
-#         ]
-#         for job_id in completed_jobs:
-#             scheduled_jobs.pop(job_id, None)
-
-#         # Get active jobs
-#         for job_id, job_info in scheduled_jobs.items():
-#             jobs_list.append(
-#                 {
-#                     "job_id": job_id,
-#                     "swarm_name": job_info["swarm_name"],
-#                     "scheduled_time": job_info["scheduled_time"].isoformat(),
-#                     "timezone": job_info["timezone"],
-#                 }
-#             )
-
-#         return {"status": "success", "scheduled_jobs": jobs_list}
-
-#     except Exception as e:
-#         logger.error(f"Error retrieving scheduled jobs: {str(e)}")
-#         raise HTTPException(
-#             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-#             detail=f"Failed to retrieve scheduled jobs: {str(e)}",
-#         )
-
-
-# @app.delete(
-#     "/v1/swarm/schedule/{job_id}",
-#     dependencies=[
-#         Depends(verify_api_key),
-#         Depends(rate_limiter),
-#     ],
-# )
-# async def cancel_scheduled_job(
-#     job_id: str, x_api_key: str = Header(...)
-# ) -> Dict[str, Any]:
-#     """
-#     Cancel a scheduled swarm job.
-#     """
-#     try:
-#         if job_id not in scheduled_jobs:
-#             raise HTTPException(
-#                 status_code=status.HTTP_404_NOT_FOUND, detail="Scheduled job not found"
-#             )
-
-#         # Cancel and remove the job
-#         job_info = scheduled_jobs[job_id]
-#         job_info["job"].cancelled = True
-#         scheduled_jobs.pop(job_id)
-
-#         await log_api_request(
-#             x_api_key, {"action": "cancel_scheduled_job", "job_id": job_id}
-#         )
-
-#         return {
-#             "status": "success",
-#             "message": "Scheduled job cancelled successfully",
-#             "job_id": job_id,
-#         }
-
-#     except HTTPException:
-#         raise
-#     except Exception as e:
-#         logger.error(f"Error cancelling scheduled job: {str(e)}")
-#         raise HTTPException(
-#             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-#             detail=f"Failed to cancel scheduled job: {str(e)}",
-#         )
 
 
 # --- Main Entrypoint ---
