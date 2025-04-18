@@ -462,7 +462,7 @@ def create_single_agent(agent_spec: Union[AgentSpec, dict]) -> Agent:
             max_loops=agent_spec.max_loops or 1,
             dynamic_temperature_enabled=True,
             tools_list_dictionary=agent_spec.tools_dictionary,
-            output_type="dict-all-except-first",
+            output_type="str-all-except-first",
         )
 
         logger.info("Successfully created agent: {}", agent_spec.agent_name)

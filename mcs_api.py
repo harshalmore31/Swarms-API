@@ -65,7 +65,6 @@ def run_single_swarm():
         "max_loops": 1,
         "swarm_type": "SequentialWorkflow",
         "task": "Investigate and report on the latest advancements in cancer treatment, focusing on innovative therapies and their clinical implications.",
-        "output_type": "dict",
     }
 
     response = requests.post(
