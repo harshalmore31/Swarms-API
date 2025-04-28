@@ -908,6 +908,104 @@ def calculate_swarm_cost(
         raise ValueError(f"Failed to calculate swarm cost: {str(e)}")
 
 
+def calculate_agent_cost(
+    agent: Agent,
+    input_text: str,
+    execution_time: float,
+    agent_output: Union[Dict[str, str], str, List[Dict[str, str]]] = None,
+) -> Dict[str, Any]:
+    """
+    Calculate the cost for a single agent based on its input, output, and execution time.
+
+    Args:
+        agent: The agent instance
+        input_text: The input task/prompt text
+        execution_time: Time taken to execute in seconds
+        agent_output: Output from the agent (can be dict, string, or list of dicts)
+
+    Returns:
+        Dict containing cost breakdown and total cost for this agent
+    """
+    # Base costs per unit
+    COST_PER_AGENT = 0.01  # Base cost per agent
+    COST_PER_1M_INPUT_TOKENS = 2.00  # Cost per 1M input tokens
+    COST_PER_1M_OUTPUT_TOKENS = 4.50  # Cost per 1M output tokens
+
+    # Get current time in California timezone
+    california_tz = pytz.timezone("America/Los_Angeles")
+    current_time = datetime.now(california_tz)
+    is_night_time = current_time.hour >= 20 or current_time.hour < 6  # 8 PM to 6 AM
+
+    try:
+        # Calculate input tokens
+        input_tokens = count_tokens(input_text)  # Base task tokens
+
+        # Add system prompt tokens if present
+        if agent.system_prompt:
+            input_tokens += count_tokens(agent.system_prompt)
+
+        # Add memory tokens if available
+        try:
+            memory = agent.short_memory.return_history_as_string()
+            if memory:
+                memory_tokens = count_tokens(str(memory))
+                input_tokens += memory_tokens
+        except Exception as e:
+            logger.warning(
+                f"Could not get memory for agent {agent.agent_name}: {str(e)}"
+            )
+
+        # Calculate output tokens
+        if agent_output:
+            if isinstance(agent_output, list):
+                # Sum tokens for each dictionary's content
+                output_tokens = sum(
+                    count_tokens(message["content"]) for message in agent_output
+                )
+            elif isinstance(agent_output, str):
+                output_tokens = count_tokens(agent_output)
+            elif isinstance(agent_output, dict):
+                output_tokens = count_tokens(any_to_str(agent_output))
+            else:
+                output_tokens = count_tokens(any_to_str(agent_output))
+        else:
+            output_tokens = int(input_tokens * 2.5)  # Estimated output tokens
+
+        # Calculate base costs (convert to millions of tokens)
+        agent_base_cost = COST_PER_AGENT
+        input_token_cost = (input_tokens / 1_000_000) * COST_PER_1M_INPUT_TOKENS
+        output_token_cost = (output_tokens / 1_000_000) * COST_PER_1M_OUTPUT_TOKENS
+
+        # Apply discount during California night time hours
+        if is_night_time:
+            input_token_cost *= 0.25  # 75% discount
+            output_token_cost *= 0.25  # 75% discount
+
+        # Calculate total cost
+        total_cost = agent_base_cost + input_token_cost + output_token_cost
+
+        return {
+            "agent_name": agent.agent_name,
+            "cost_breakdown": {
+                "agent_base_cost": round(agent_base_cost, 6),
+                "input_token_cost": round(input_token_cost, 6),
+                "output_token_cost": round(output_token_cost, 6),
+                "token_counts": {
+                    "input_tokens": input_tokens,
+                    "output_tokens": output_tokens,
+                    "total_tokens": input_tokens + output_tokens,
+                },
+                "execution_time_seconds": round(execution_time, 2),
+                "night_time_discount_applied": is_night_time,
+            },
+            "total_cost": round(total_cost, 6),
+        }
+
+    except Exception as e:
+        logger.error(f"Error calculating agent cost: {str(e)}")
+        raise ValueError(f"Failed to calculate agent cost: {str(e)}")
+
+
 async def get_swarm_types() -> List[str]:
     """Returns a list of available swarm types"""
     return [
