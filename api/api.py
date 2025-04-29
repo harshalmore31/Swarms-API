@@ -38,7 +38,26 @@ from swarms import Agent, SwarmRouter, SwarmType
 from swarms.utils.any_to_str import any_to_str
 from swarms.utils.litellm_tokenizer import count_tokens
 from swarms.agents.reasoning_agents import ReasoningAgentRouter, agent_types
-from swarms.structs.output_types import output_type
+from typing import Literal
+
+# Literal of output types
+OutputType = Literal[
+    "all",
+    "final",
+    "list",
+    "dict",
+    ".json",
+    ".md",
+    ".txt",
+    ".yaml",
+    ".toml",
+    "string",
+    "str",
+]
+
+# Use the OutputType for type annotations
+output_type: OutputType
+
 
 load_dotenv()
 
